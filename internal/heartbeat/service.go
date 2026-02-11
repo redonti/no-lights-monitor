@@ -31,11 +31,12 @@ type monitorInfo struct {
 
 // Service handles heartbeat pings and offline detection.
 type Service struct {
-	monitors  sync.Map // token (string) -> *monitorInfo
-	db        *database.DB
-	cache     *cache.Cache
-	notifier  Notifier
-	threshold time.Duration
+	monitors    sync.Map // token (string) -> *monitorInfo
+	db          *database.DB
+	cache       *cache.Cache
+	notifier    Notifier
+	threshold   time.Duration
+	startupTime time.Time // when the service started, used for grace period
 }
 
 func NewService(db *database.DB, c *cache.Cache, notifier Notifier, thresholdSec int) *Service {
@@ -53,11 +54,16 @@ func (s *Service) SetNotifier(n Notifier) {
 }
 
 // LoadMonitors reads all monitors from the DB into the in-memory map.
+// It also records the startup time for grace period handling.
 func (s *Service) LoadMonitors(ctx context.Context) error {
 	monitors, err := s.db.GetAllMonitors(ctx)
 	if err != nil {
 		return err
 	}
+
+	// Record startup time for grace period.
+	s.startupTime = time.Now()
+
 	for _, m := range monitors {
 		s.monitors.Store(m.Token, &monitorInfo{
 			ID:         m.ID,
@@ -70,7 +76,7 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 			LastChange: m.LastStatusChangeAt,
 		})
 	}
-	log.Printf("[heartbeat] loaded %d monitors into memory", len(monitors))
+	log.Printf("[heartbeat] loaded %d monitors into memory (grace period: %s)", len(monitors), s.threshold)
 	return nil
 }
 
@@ -169,6 +175,13 @@ func (s *Service) StartChecker(ctx context.Context, intervalSec int) {
 
 func (s *Service) checkAll(ctx context.Context) {
 	now := time.Now()
+
+	// Grace period: don't mark monitors offline until we've been running
+	// for at least one threshold period. This prevents false notifications
+	// after system restart when monitors are still alive but haven't pinged yet.
+	if now.Sub(s.startupTime) < s.threshold {
+		return // still in grace period, skip this check
+	}
 
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)

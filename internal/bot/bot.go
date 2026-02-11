@@ -13,6 +13,7 @@ import (
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/geocode"
 	"no-lights-monitor/internal/heartbeat"
+	"no-lights-monitor/internal/models"
 
 	tele "gopkg.in/telebot.v3"
 )
@@ -101,8 +102,16 @@ func (b *Bot) registerHandlers() {
 	b.bot.Handle("/start", b.handleStart)
 	b.bot.Handle("/create", b.handleCreate)
 	b.bot.Handle("/status", b.handleStatus)
+	b.bot.Handle("/info", b.handleInfo)
+	b.bot.Handle("/stop", b.handleStop)
+	b.bot.Handle("/resume", b.handleResume)
+	b.bot.Handle("/test", b.handleTest)
+	b.bot.Handle("/delete", b.handleDelete)
 	b.bot.Handle("/help", b.handleHelp)
 	b.bot.Handle("/cancel", b.handleCancel)
+
+	// Callback queries for inline buttons.
+	b.bot.Handle(tele.OnCallback, b.handleCallback)
 
 	// Handle all text messages for conversation flow.
 	b.bot.Handle(tele.OnText, b.handleText)
@@ -120,6 +129,11 @@ func (b *Bot) handleStart(c tele.Context) error {
 
 /create - Налаштувати новий монітор
 /status - Перевірити стан моніторів
+/info - Детальна інформація та URL для пінгу
+/test - Відправити тестове повідомлення
+/stop - Призупинити моніторинг
+/resume - Відновити моніторинг
+/delete - Видалити монітор
 /help - Детальніше`
 
 	return c.Send(msg, htmlOpts)
@@ -136,7 +150,14 @@ func (b *Bot) handleHelp(c tele.Context) error {
 6. Якщо пінги зупиняються — я сповіщаю канал, що світла немає
 7. Коли пінги відновлюються — сповіщаю, що світло є
 
-Використайте /cancel щоб скасувати поточну операцію.`
+<b>Команди:</b>
+/status — переглянути всі монітори
+/info — детальна інформація та URL для пінгу
+/test — відправити тестове повідомлення в канал
+/stop — призупинити моніторинг (не буде сповіщень)
+/resume — відновити призупинений монітор
+/delete — видалити монітор назавжди
+/cancel — скасувати поточну операцію`
 
 	return c.Send(msg, htmlOpts)
 }
@@ -171,9 +192,16 @@ func (b *Bot) handleStatus(c tele.Context) error {
 		if m.IsOnline {
 			status = "⚡ Світло є"
 		}
+		if !m.IsActive {
+			status = "⏸ Призупинено"
+		}
 		bld.WriteString(fmt.Sprintf("<b>%d.</b> %s\n", i+1, html.EscapeString(m.Name)))
 		bld.WriteString(fmt.Sprintf("   %s\n", html.EscapeString(m.Address)))
-		bld.WriteString(fmt.Sprintf("   %s — %s\n", status, durStr))
+		if m.IsActive {
+			bld.WriteString(fmt.Sprintf("   %s — %s\n", status, durStr))
+		} else {
+			bld.WriteString(fmt.Sprintf("   %s\n", status))
+		}
 		if m.ChannelName != "" {
 			bld.WriteString(fmt.Sprintf("   Канал: @%s\n", html.EscapeString(m.ChannelName)))
 		}
@@ -183,6 +211,321 @@ func (b *Bot) handleStatus(c tele.Context) error {
 	bld.WriteString("/create — додати новий монітор")
 
 	return c.Send(bld.String(), htmlOpts)
+}
+
+func (b *Bot) handleStop(c tele.Context) error {
+	ctx := context.Background()
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+	}
+
+	// Filter only active monitors.
+	var active []*models.Monitor
+	for _, m := range monitors {
+		if m.IsActive {
+			active = append(active, m)
+		}
+	}
+
+	if len(active) == 0 {
+		return c.Send("У вас немає активних моніторів для зупинки.\n\nВикористайте /resume, щоб відновити призупинені монітори.")
+	}
+
+	var bld strings.Builder
+	bld.WriteString("<b>Призупинити моніторинг</b>\n\n")
+	bld.WriteString("Оберіть монітор для зупинки:\n\n")
+
+	rows := make([][]tele.InlineButton, 0, len(active))
+	for i, m := range active {
+		bld.WriteString(fmt.Sprintf("%d. %s\n", i+1, html.EscapeString(m.Name)))
+		rows = append(rows, []tele.InlineButton{
+			{
+				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
+				Data: fmt.Sprintf("stop:%d", m.ID),
+			},
+		})
+	}
+
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
+	return c.Send(bld.String(), keyboard, htmlOpts)
+}
+
+func (b *Bot) handleResume(c tele.Context) error {
+	ctx := context.Background()
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+	}
+
+	// Filter only inactive monitors.
+	var inactive []*models.Monitor
+	for _, m := range monitors {
+		if !m.IsActive {
+			inactive = append(inactive, m)
+		}
+	}
+
+	if len(inactive) == 0 {
+		return c.Send("У вас немає призупинених моніторів.\n\nВикористайте /stop, щоб призупинити монітор.")
+	}
+
+	var bld strings.Builder
+	bld.WriteString("<b>Відновити моніторинг</b>\n\n")
+	bld.WriteString("Оберіть монітор для відновлення:\n\n")
+
+	rows := make([][]tele.InlineButton, 0, len(inactive))
+	for i, m := range inactive {
+		bld.WriteString(fmt.Sprintf("%d. %s\n", i+1, html.EscapeString(m.Name)))
+		rows = append(rows, []tele.InlineButton{
+			{
+				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
+				Data: fmt.Sprintf("resume:%d", m.ID),
+			},
+		})
+	}
+
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
+	return c.Send(bld.String(), keyboard, htmlOpts)
+}
+
+func (b *Bot) handleCallback(c tele.Context) error {
+	data := c.Callback().Data
+	parts := strings.Split(data, ":")
+	if len(parts) != 2 {
+		return c.Respond(&tele.CallbackResponse{Text: "Невірний формат"})
+	}
+
+	action := parts[0]
+	monitorID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return c.Respond(&tele.CallbackResponse{Text: "Невірний ID монітора"})
+	}
+
+	ctx := context.Background()
+
+	// Get all monitors and find the right one
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Respond(&tele.CallbackResponse{Text: "Помилка отримання даних"})
+	}
+
+	var targetMonitor *models.Monitor
+	for _, m := range monitors {
+		if m.ID == monitorID {
+			targetMonitor = m
+			break
+		}
+	}
+
+	if targetMonitor == nil {
+		return c.Respond(&tele.CallbackResponse{Text: "Монітор не знайдено"})
+	}
+
+	switch action {
+	case "stop":
+		if err := b.db.SetMonitorActive(ctx, monitorID, false); err != nil {
+			log.Printf("[bot] set monitor inactive error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: "Помилка зупинки моніторингу"})
+		}
+		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, false)
+		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Моніторинг призупинено"})
+		return c.Send(fmt.Sprintf("✅ Моніторинг <b>%s</b> призупинено.\n\nВідновити можна через /resume", html.EscapeString(targetMonitor.Name)), htmlOpts)
+
+	case "resume":
+		if err := b.db.SetMonitorActive(ctx, monitorID, true); err != nil {
+			log.Printf("[bot] set monitor active error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: "Помилка відновлення моніторингу"})
+		}
+		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, true)
+		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Моніторинг відновлено"})
+		return c.Send(fmt.Sprintf("✅ Моніторинг <b>%s</b> відновлено.\n\nПризупинити можна через /stop", html.EscapeString(targetMonitor.Name)), htmlOpts)
+
+	case "delete_confirm":
+		// Delete the monitor from database
+		if err := b.db.DeleteMonitor(ctx, monitorID); err != nil {
+			log.Printf("[bot] delete monitor error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: "Помилка видалення монітора"})
+		}
+		// Remove from heartbeat service memory
+		b.heartbeatSvc.RemoveMonitor(targetMonitor.Token)
+		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Монітор видалено"})
+		return c.Send(fmt.Sprintf("✅ Монітор <b>%s</b> успішно видалено.", html.EscapeString(targetMonitor.Name)), htmlOpts)
+
+	case "info":
+		// Show detailed information about the monitor
+		_ = c.Respond(&tele.CallbackResponse{})
+
+		var bld strings.Builder
+		bld.WriteString(fmt.Sprintf("<b>📊 Інформація про монітор</b>\n\n"))
+		bld.WriteString(fmt.Sprintf("🏷 <b>Назва:</b> %s\n", html.EscapeString(targetMonitor.Name)))
+		bld.WriteString(fmt.Sprintf("📍 <b>Адреса:</b> %s\n", html.EscapeString(targetMonitor.Address)))
+		bld.WriteString(fmt.Sprintf("🌐 <b>Координати:</b> %.6f, %.6f\n\n", targetMonitor.Latitude, targetMonitor.Longitude))
+
+		status := "🔴 Офлайн"
+		if targetMonitor.IsOnline {
+			status = "⚡ Онлайн"
+		}
+		if !targetMonitor.IsActive {
+			status = "⏸ Призупинено"
+		}
+		bld.WriteString(fmt.Sprintf("<b>Статус:</b> %s\n", status))
+
+		if targetMonitor.LastHeartbeatAt != nil {
+			bld.WriteString(fmt.Sprintf("<b>Останній пінг:</b> %s\n", targetMonitor.LastHeartbeatAt.Format("2006-01-02 15:04:05")))
+		}
+
+		if targetMonitor.ChannelID != 0 {
+			bld.WriteString(fmt.Sprintf("<b>Канал:</b> @%s\n\n", html.EscapeString(targetMonitor.ChannelName)))
+		} else {
+			bld.WriteString("\n")
+		}
+
+		bld.WriteString(fmt.Sprintf("<b>🔗 URL для пінгу:</b>\n"))
+		bld.WriteString(fmt.Sprintf("<code>%s/api/ping/%s</code>\n\n", b.baseURL, targetMonitor.Token))
+		bld.WriteString("<i>Налаштуйте ваш пристрій відправляти GET-запити на цей URL кожні 5 хвилин.</i>")
+
+		return c.Send(bld.String(), htmlOpts)
+
+	case "test":
+		// Send test notification to channel
+		if targetMonitor.ChannelID == 0 {
+			return c.Respond(&tele.CallbackResponse{Text: "У цього монітора немає каналу"})
+		}
+
+		testMsg := fmt.Sprintf(
+			"🧪 <b>Тестове повідомлення</b>\n\n"+
+				"Монітор: <b>%s</b>\n"+
+				"Адреса: %s\n\n"+
+				"Якщо ви бачите це повідомлення, то налаштування каналу працює коректно! ✅",
+			html.EscapeString(targetMonitor.Name),
+			html.EscapeString(targetMonitor.Address),
+		)
+
+		chat := &tele.Chat{ID: targetMonitor.ChannelID}
+		if _, err := b.bot.Send(chat, testMsg, htmlOpts); err != nil {
+			log.Printf("[bot] test notification error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: "Помилка відправки тестового повідомлення"})
+		}
+
+		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Тест відправлено"})
+		return c.Send(fmt.Sprintf("✅ Тестове повідомлення відправлено в канал <b>@%s</b>", html.EscapeString(targetMonitor.ChannelName)), htmlOpts)
+
+	default:
+		return c.Respond(&tele.CallbackResponse{Text: "Невідома дія"})
+	}
+}
+
+func (b *Bot) handleInfo(c tele.Context) error {
+	ctx := context.Background()
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+	}
+
+	if len(monitors) == 0 {
+		return c.Send("У вас ще немає моніторів.\n\nСтворіть перший через /create")
+	}
+
+	var bld strings.Builder
+	bld.WriteString("<b>Детальна інформація про монітори</b>\n\n")
+
+	rows := make([][]tele.InlineButton, 0, len(monitors))
+	for i, m := range monitors {
+		status := "🔴 Офлайн"
+		if m.IsOnline {
+			status = "⚡ Онлайн"
+		}
+		if !m.IsActive {
+			status = "⏸ Призупинено"
+		}
+
+		bld.WriteString(fmt.Sprintf("<b>%d.</b> %s - %s\n", i+1, html.EscapeString(m.Name), status))
+		rows = append(rows, []tele.InlineButton{
+			{
+				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
+				Data: fmt.Sprintf("info:%d", m.ID),
+			},
+		})
+	}
+
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
+	return c.Send(bld.String(), keyboard, htmlOpts)
+}
+
+func (b *Bot) handleTest(c tele.Context) error {
+	ctx := context.Background()
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+	}
+
+	// Filter monitors with channels
+	var withChannels []*models.Monitor
+	for _, m := range monitors {
+		if m.ChannelID != 0 {
+			withChannels = append(withChannels, m)
+		}
+	}
+
+	if len(withChannels) == 0 {
+		return c.Send("У вас немає моніторів з налаштованими каналами.\n\nСпочатку створіть монітор через /create та вкажіть канал.")
+	}
+
+	var bld strings.Builder
+	bld.WriteString("<b>Надіслати тестове повідомлення</b>\n\n")
+	bld.WriteString("Оберіть монітор для відправки тесту:\n\n")
+
+	rows := make([][]tele.InlineButton, 0, len(withChannels))
+	for i, m := range withChannels {
+		bld.WriteString(fmt.Sprintf("%d. %s (@%s)\n", i+1, html.EscapeString(m.Name), html.EscapeString(m.ChannelName)))
+		rows = append(rows, []tele.InlineButton{
+			{
+				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
+				Data: fmt.Sprintf("test:%d", m.ID),
+			},
+		})
+	}
+
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
+	return c.Send(bld.String(), keyboard, htmlOpts)
+}
+
+func (b *Bot) handleDelete(c tele.Context) error {
+	ctx := context.Background()
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+	}
+
+	if len(monitors) == 0 {
+		return c.Send("У вас немає моніторів для видалення.")
+	}
+
+	var bld strings.Builder
+	bld.WriteString("<b>⚠️ Видалення монітора</b>\n\n")
+	bld.WriteString("Оберіть монітор для видалення:\n\n")
+	bld.WriteString("<i>Увага: ця дія незворотна! Всі дані про історію статусу будуть втрачені.</i>\n\n")
+
+	rows := make([][]tele.InlineButton, 0, len(monitors))
+	for i, m := range monitors {
+		bld.WriteString(fmt.Sprintf("%d. %s\n", i+1, html.EscapeString(m.Name)))
+		rows = append(rows, []tele.InlineButton{
+			{
+				Text: fmt.Sprintf("🗑 %d. %s", i+1, m.Name),
+				Data: fmt.Sprintf("delete_confirm:%d", m.ID),
+			},
+		})
+	}
+
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
+	return c.Send(bld.String(), keyboard, htmlOpts)
 }
 
 // ── /create flow ─────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ type monitorInfo struct {
 	Latitude   float64
 	Longitude  float64
 	IsOnline   bool
+	IsActive   bool // whether monitoring is enabled
 	LastChange time.Time
 	mu         sync.Mutex
 }
@@ -73,6 +74,7 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 			Latitude:   m.Latitude,
 			Longitude:  m.Longitude,
 			IsOnline:   m.IsOnline,
+			IsActive:   m.IsActive,
 			LastChange: m.LastStatusChangeAt,
 		})
 	}
@@ -90,8 +92,29 @@ func (s *Service) RegisterMonitor(m *models.Monitor) {
 		Latitude:   m.Latitude,
 		Longitude:  m.Longitude,
 		IsOnline:   false,
+		IsActive:   m.IsActive,
 		LastChange: m.LastStatusChangeAt,
 	})
+}
+
+// SetMonitorActive updates the active status of a monitor in memory.
+// Returns true if the monitor was found.
+func (s *Service) SetMonitorActive(token string, isActive bool) bool {
+	val, ok := s.monitors.Load(token)
+	if !ok {
+		return false
+	}
+	info := val.(*monitorInfo)
+	info.mu.Lock()
+	info.IsActive = isActive
+	info.mu.Unlock()
+	return true
+}
+
+// RemoveMonitor removes a monitor from the in-memory map.
+// This should be called after deleting a monitor from the database.
+func (s *Service) RemoveMonitor(token string) {
+	s.monitors.Delete(token)
 }
 
 // HandlePing processes a heartbeat ping for the given token.
@@ -188,6 +211,12 @@ func (s *Service) checkAll(ctx context.Context) {
 
 		// Lock and check state.
 		info.mu.Lock()
+		// Skip inactive monitors (paused by user).
+		if !info.IsActive {
+			info.mu.Unlock()
+			return true
+		}
+		// Skip already offline monitors.
 		if !info.IsOnline {
 			info.mu.Unlock()
 			return true

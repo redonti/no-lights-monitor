@@ -21,6 +21,7 @@ type Monitor struct {
 	ChannelID          int64      `json:"channel_id,omitempty"`
 	ChannelName        string     `json:"channel_name,omitempty"`
 	IsOnline           bool       `json:"is_online"`
+	IsActive           bool       `json:"is_active"` // whether monitoring is enabled
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty"`
 	LastStatusChangeAt time.Time  `json:"last_status_change_at"`
 	GraphMessageID     int        `json:"graph_message_id"`

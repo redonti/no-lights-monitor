@@ -103,32 +103,45 @@ func (s *Service) HandlePing(ctx context.Context, token string) bool {
 		log.Printf("[heartbeat] redis set error for monitor %d: %v", info.ID, err)
 	}
 
-	// If monitor was offline, transition to online.
+	// Check and update online status under lock.
 	info.mu.Lock()
 	wasOffline := !info.IsOnline
+	var offlineDuration time.Duration
 	if wasOffline {
-		duration := now.Sub(info.LastChange)
+		offlineDuration = now.Sub(info.LastChange)
 		info.IsOnline = true
 		info.LastChange = now
-		info.mu.Unlock()
+	}
+	// Capture values needed for async operations while still under lock.
+	monitorID := info.ID
+	monitorName := info.Name
+	channelID := info.ChannelID
+	info.mu.Unlock()
 
+	// Perform expensive operations outside the lock.
+	if wasOffline {
 		// Persist to DB.
 		go func() {
-			_ = s.db.UpdateMonitorStatus(context.Background(), info.ID, true)
-			_ = s.db.UpdateMonitorHeartbeat(context.Background(), info.ID, now)
+			if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, true); err != nil {
+				log.Printf("[heartbeat] failed to update status for monitor %d: %v", monitorID, err)
+			}
+			if err := s.db.UpdateMonitorHeartbeat(context.Background(), monitorID, now); err != nil {
+				log.Printf("[heartbeat] failed to update heartbeat for monitor %d: %v", monitorID, err)
+			}
 		}()
 
 		// Notify Telegram channel.
-		if s.notifier != nil && info.ChannelID != 0 {
-			go s.notifier.NotifyStatusChange(info.ChannelID, info.Name, true, duration)
+		if s.notifier != nil && channelID != 0 {
+			go s.notifier.NotifyStatusChange(channelID, monitorName, true, offlineDuration)
 		}
 
-		log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", info.ID, info.Name, database.FormatDuration(duration))
+		log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(offlineDuration))
 	} else {
-		info.mu.Unlock()
 		// Just update heartbeat timestamp in DB.
 		go func() {
-			_ = s.db.UpdateMonitorHeartbeat(context.Background(), info.ID, now)
+			if err := s.db.UpdateMonitorHeartbeat(context.Background(), monitorID, now); err != nil {
+				log.Printf("[heartbeat] failed to update heartbeat for monitor %d: %v", monitorID, err)
+			}
 		}()
 	}
 
@@ -159,36 +172,57 @@ func (s *Service) checkAll(ctx context.Context) {
 
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)
-		info.mu.Lock()
 
+		// Lock and check state.
+		info.mu.Lock()
 		if !info.IsOnline {
 			info.mu.Unlock()
 			return true
 		}
 
-		lastHB, err := s.cache.GetHeartbeat(ctx, info.ID)
+		// Capture monitor ID for cache lookup (can be done outside lock, but kept here for clarity).
+		monitorID := info.ID
+		info.mu.Unlock()
+
+		// Check heartbeat in cache (outside lock - this is an I/O operation).
+		lastHB, err := s.cache.GetHeartbeat(ctx, monitorID)
 		if err != nil {
+			return true
+		}
+
+		// Check if threshold exceeded and update state.
+		info.mu.Lock()
+		// Double-check IsOnline in case it changed while we were checking cache.
+		if !info.IsOnline {
 			info.mu.Unlock()
 			return true
 		}
 
-		if now.Sub(lastHB) > s.threshold {
-			duration := now.Sub(info.LastChange)
+		isStale := now.Sub(lastHB) > s.threshold
+		var onlineDuration time.Duration
+		if isStale {
+			onlineDuration = now.Sub(info.LastChange)
 			info.IsOnline = false
 			info.LastChange = now
-			info.mu.Unlock()
+		}
+		// Capture values for async operations.
+		monitorName := info.Name
+		channelID := info.ChannelID
+		info.mu.Unlock()
 
+		// Perform expensive operations outside the lock.
+		if isStale {
 			go func() {
-				_ = s.db.UpdateMonitorStatus(context.Background(), info.ID, false)
+				if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, false); err != nil {
+					log.Printf("[heartbeat] failed to update status for monitor %d: %v", monitorID, err)
+				}
 			}()
 
-			if s.notifier != nil && info.ChannelID != 0 {
-				go s.notifier.NotifyStatusChange(info.ChannelID, info.Name, false, duration)
+			if s.notifier != nil && channelID != 0 {
+				go s.notifier.NotifyStatusChange(channelID, monitorName, false, onlineDuration)
 			}
 
-			log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", info.ID, info.Name, database.FormatDuration(duration))
-		} else {
-			info.mu.Unlock()
+			log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", monitorID, monitorName, database.FormatDuration(onlineDuration))
 		}
 
 		return true

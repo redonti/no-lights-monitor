@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"sync"
 	"time"
 
@@ -23,7 +24,16 @@ type Handlers struct {
 	monitorCacheMu sync.RWMutex
 }
 
-const monitorCacheTTL = 15 * time.Second
+const (
+	// MonitorCacheTTL is how long to cache the monitor list response.
+	MonitorCacheTTL = 15 * time.Second
+	// MonitorCacheMaxAgeSec is the Cache-Control max-age header value.
+	MonitorCacheMaxAgeSec = 15
+	// DefaultHistoryLookback is the default time range for history queries.
+	DefaultHistoryLookback = 24 * time.Hour
+	// MaxHistoryRange is the maximum allowed time range for history queries.
+	MaxHistoryRange = 30 * 24 * time.Hour
+)
 
 // Ping handles GET /api/ping/:token -- the core heartbeat endpoint.
 func (h *Handlers) Ping(c *fiber.Ctx) error {
@@ -45,11 +55,11 @@ func (h *Handlers) Ping(c *fiber.Ctx) error {
 func (h *Handlers) GetMonitors(c *fiber.Ctx) error {
 	// Try serving from cache.
 	h.monitorCacheMu.RLock()
-	if h.monitorCache != nil && time.Since(h.monitorCacheAt) < monitorCacheTTL {
+	if h.monitorCache != nil && time.Since(h.monitorCacheAt) < MonitorCacheTTL {
 		data := h.monitorCache
 		h.monitorCacheMu.RUnlock()
 		c.Set("Content-Type", "application/json")
-		c.Set("Cache-Control", "public, max-age=15")
+		c.Set("Cache-Control", "public, max-age="+strconv.Itoa(MonitorCacheMaxAgeSec))
 		return c.Send(data)
 	}
 	h.monitorCacheMu.RUnlock()
@@ -59,9 +69,9 @@ func (h *Handlers) GetMonitors(c *fiber.Ctx) error {
 	defer h.monitorCacheMu.Unlock()
 
 	// Double-check after acquiring write lock.
-	if h.monitorCache != nil && time.Since(h.monitorCacheAt) < monitorCacheTTL {
+	if h.monitorCache != nil && time.Since(h.monitorCacheAt) < MonitorCacheTTL {
 		c.Set("Content-Type", "application/json")
-		c.Set("Cache-Control", "public, max-age=15")
+		c.Set("Cache-Control", "public, max-age="+strconv.Itoa(MonitorCacheMaxAgeSec))
 		return c.Send(h.monitorCache)
 	}
 
@@ -97,7 +107,7 @@ func (h *Handlers) GetMonitors(c *fiber.Ctx) error {
 	h.monitorCacheAt = now
 
 	c.Set("Content-Type", "application/json")
-	c.Set("Cache-Control", "public, max-age=15")
+	c.Set("Cache-Control", "public, max-age="+strconv.Itoa(MonitorCacheMaxAgeSec))
 	return c.Send(data)
 }
 
@@ -111,7 +121,7 @@ func (h *Handlers) GetHistory(c *fiber.Ctx) error {
 	}
 
 	now := time.Now()
-	from := now.Add(-24 * time.Hour)
+	from := now.Add(-DefaultHistoryLookback)
 	to := now
 
 	if v := c.Query("from"); v != "" {
@@ -125,9 +135,9 @@ func (h *Handlers) GetHistory(c *fiber.Ctx) error {
 		}
 	}
 
-	// Cap to 30 days max.
-	if to.Sub(from) > 30*24*time.Hour {
-		from = to.Add(-30 * 24 * time.Hour)
+	// Cap to max history range.
+	if to.Sub(from) > MaxHistoryRange {
+		from = to.Add(-MaxHistoryRange)
 	}
 
 	ctx := context.Background()

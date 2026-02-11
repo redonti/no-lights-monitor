@@ -29,6 +29,19 @@ func (db *DB) Close() {
 	db.Pool.Close()
 }
 
+// scanMonitor is a helper that scans a row into a Monitor struct.
+// It works with both pgx.Row and pgx.Rows since both have a Scan method.
+func scanMonitor(scanner interface {
+	Scan(dest ...interface{}) error
+}, m *models.Monitor) error {
+	return scanner.Scan(
+		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
+		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
+		&m.IsOnline, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
+		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
+	)
+}
+
 // Migrate creates the schema if it doesn't exist.
 func (db *DB) Migrate(ctx context.Context) error {
 	sql := `
@@ -96,18 +109,14 @@ func (db *DB) UpsertUser(ctx context.Context, telegramID int64, username, firstN
 // CreateMonitor inserts a new monitor and returns it (with generated token).
 func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address string, lat, lng float64, channelID int64, channelName string) (*models.Monitor, error) {
 	var m models.Monitor
-	err := db.Pool.QueryRow(ctx, `
+	row := db.Pool.QueryRow(ctx, `
 		INSERT INTO monitors (user_id, name, address, latitude, longitude, channel_id, channel_name)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, user_id, token, name, address, latitude, longitude,
 		          channel_id, channel_name, is_online, last_heartbeat_at,
 		          last_status_change_at, graph_message_id, graph_week_start, created_at
-	`, userID, name, address, lat, lng, channelID, channelName).Scan(
-		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
-		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
-		&m.IsOnline, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
-		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
-	)
+	`, userID, name, address, lat, lng, channelID, channelName)
+	err := scanMonitor(row, &m)
 	if err != nil {
 		return nil, err
 	}
@@ -117,17 +126,13 @@ func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address str
 // GetMonitorByToken returns a monitor by its unique token.
 func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Monitor, error) {
 	var m models.Monitor
-	err := db.Pool.QueryRow(ctx, `
+	row := db.Pool.QueryRow(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, is_online, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors WHERE token = $1
-	`, token).Scan(
-		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
-		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
-		&m.IsOnline, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
-		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
-	)
+	`, token)
+	err := scanMonitor(row, &m)
 	if err != nil {
 		return nil, err
 	}
@@ -153,12 +158,7 @@ func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]
 	var monitors []*models.Monitor
 	for rows.Next() {
 		var m models.Monitor
-		if err := rows.Scan(
-			&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
-			&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
-			&m.IsOnline, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
-			&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
-		); err != nil {
+		if err := scanMonitor(rows, &m); err != nil {
 			return nil, err
 		}
 		monitors = append(monitors, &m)
@@ -182,12 +182,7 @@ func (db *DB) GetAllMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	var monitors []*models.Monitor
 	for rows.Next() {
 		var m models.Monitor
-		if err := rows.Scan(
-			&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
-			&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
-			&m.IsOnline, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
-			&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
-		); err != nil {
+		if err := scanMonitor(rows, &m); err != nil {
 			return nil, err
 		}
 		monitors = append(monitors, &m)
@@ -264,12 +259,7 @@ func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, e
 	var monitors []*models.Monitor
 	for rows.Next() {
 		var m models.Monitor
-		if err := rows.Scan(
-			&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
-			&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
-			&m.IsOnline, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
-			&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
-		); err != nil {
+		if err := scanMonitor(rows, &m); err != nil {
 			return nil, err
 		}
 		monitors = append(monitors, &m)

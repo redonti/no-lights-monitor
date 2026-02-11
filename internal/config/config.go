@@ -5,6 +5,13 @@ import (
 	"strconv"
 )
 
+const (
+	// DefaultPingIntervalSec is the expected seconds between heartbeat pings.
+	DefaultPingIntervalSec = 300
+	// DefaultOfflineThresholdSec is seconds without ping before marking monitor offline.
+	DefaultOfflineThresholdSec = 300
+)
+
 type Config struct {
 	Port             string
 	DatabaseURL      string
@@ -24,8 +31,8 @@ func Load() *Config {
 		BotToken:         getEnv("BOT_TOKEN", ""),
 		BaseURL:          getEnv("BASE_URL", "http://localhost:8080"),
 		GraphServiceURL:  getEnv("GRAPH_SERVICE_URL", "http://localhost:8000"),
-		PingInterval:     getEnvInt("PING_INTERVAL", 300),
-		OfflineThreshold: getEnvInt("OFFLINE_THRESHOLD", 300),
+		PingInterval:     getEnvInt("PING_INTERVAL", DefaultPingIntervalSec),
+		OfflineThreshold: getEnvInt("OFFLINE_THRESHOLD", DefaultOfflineThresholdSec),
 	}
 }
 

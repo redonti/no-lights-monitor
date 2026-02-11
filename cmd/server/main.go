@@ -21,6 +21,11 @@ import (
 	"no-lights-monitor/internal/heartbeat"
 )
 
+const (
+	// HeartbeatCheckIntervalSec is how often we check for stale heartbeats.
+	HeartbeatCheckIntervalSec = 30
+)
+
 func main() {
 	// Load .env if present.
 	_ = godotenv.Load()
@@ -76,7 +81,7 @@ func main() {
 	log.Println("telegram bot started")
 
 	// --- Start heartbeat checker ---
-	go hbService.StartChecker(ctx, 30)
+	go hbService.StartChecker(ctx, HeartbeatCheckIntervalSec)
 
 	// --- Graph updater (hourly) ---
 	graphClient := graph.NewClient(cfg.GraphServiceURL)

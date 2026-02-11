@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта - No-Lights Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <style>
+    body { margin: 0; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
+    #map { width: 100vw; height: 100vh; }
+
+    .map-header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px);
+      border-bottom: 1px solid #e2e0dc;
+      padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .map-header a {
+      color: #1c1917; text-decoration: none; font-weight: 600; font-size: 1rem;
+    }
+    .map-header .back { color: #78716c; font-size: 0.88rem; font-weight: 400; }
+    .map-header .back:hover { color: #1c1917; }
+
+    .map-legend {
+      position: fixed; bottom: 24px; left: 24px; z-index: 1000;
+      background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(10px);
+      border: 1px solid #e2e0dc;
+      border-radius: 10px; padding: 14px 18px; color: #1c1917;
+      font-size: 0.85rem;
+    }
+    .map-legend h4 { margin: 0 0 8px 0; font-size: 0.85rem; font-weight: 600; }
+    .legend-item { display: flex; align-items: center; gap: 8px; margin: 5px 0; color: #44403c; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .legend-dot.online { background: #16a34a; }
+    .legend-dot.offline { background: #dc2626; }
+
+    .stats-badge {
+      position: fixed; bottom: 24px; right: 24px; z-index: 1000;
+      background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(10px);
+      border: 1px solid #e2e0dc;
+      border-radius: 10px; padding: 10px 18px; color: #44403c;
+      font-size: 0.85rem;
+    }
+    .stats-badge span { font-weight: 600; color: #1c1917; }
+  </style>
+</head>
+<body>
+  <div class="map-header">
+    <a href="/map.html">Карта</a>
+    <a href="/" class="back">На головну</a>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="map-legend">
+    <h4>Легенда</h4>
+    <div class="legend-item"><div class="legend-dot online"></div> Світло є</div>
+    <div class="legend-item"><div class="legend-dot offline"></div> Світла немає</div>
+  </div>
+
+  <div class="stats-badge" id="stats-badge">
+    Завантаження...
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="/js/map.js"></script>
+</body>
+</html>

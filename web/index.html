@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>No-Lights Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <header class="header">
+    <div class="container header-inner">
+      <a href="/" class="logo">No-Lights Monitor</a>
+      <nav class="nav">
+        <a href="#how-it-works">Як це працює</a>
+        <a href="/map.html" class="btn btn-sm btn-outline">Карта</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <h1>Дізнайся, коли зникає світло.</h1>
+      <p class="hero-sub">
+        Моніторинг електроенергії вдома чи в офісі. Миттєві сповіщення в Telegram,
+        коли світло зникає — і коли повертається.
+      </p>
+      <div class="hero-actions">
+        <a href="https://t.me/no_lights_monitor_bot" class="btn btn-primary" id="bot-link">Налаштувати монітор</a>
+        <a href="/map.html" class="btn btn-outline">Переглянути карту</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="container stats-grid">
+      <div class="stat-card">
+        <span class="stat-number" id="stat-monitors">—</span>
+        <span class="stat-label">Локацій</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-number" id="stat-users">—</span>
+        <span class="stat-label">Користувачів</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <h2>Як це працює</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Реєстрація через Telegram</h3>
+            <p>Запустіть нашого бота, вкажіть місцезнаходження та створіть канал для сповіщень.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Підключіть пристрій</h3>
+            <p>Будь-який пристрій, що може робити HTTP-запити — старий телефон, ESP32, Raspberry Pi. Він пінгує наш сервер кожні 5 хвилин, поки є електрика.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Отримуйте сповіщення</h3>
+            <p>Коли пінги зупиняються — світла немає. Ваш Telegram-канал одразу отримує сповіщення. Так само, коли світло повертається.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="map-preview">
+    <div class="container">
+      <h2>Карта в реальному часі</h2>
+      <p>Кожен маркер — це точка моніторингу. <span class="green">Зелений</span> — світло є. <span class="red">Червоний</span> — світла немає.</p>
+      <a href="/map.html" class="btn btn-outline">Відкрити карту</a>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>No-Lights Monitor</span>
+      <span>Моніторинг електроенергії</span>
+    </div>
+  </footer>
+
+  <script>
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        document.getElementById('stat-monitors').textContent = data.monitors_count.toLocaleString();
+        document.getElementById('stat-users').textContent = data.users_count.toLocaleString();
+      } catch (e) {
+        // stats unavailable
+      }
+    }
+    loadStats();
+    setInterval(loadStats, 30000);
+  </script>
+</body>
+</html>

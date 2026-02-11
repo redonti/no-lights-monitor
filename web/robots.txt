@@ -1,0 +1,19 @@
+User-agent: *
+Disallow: /api/
+Disallow: /.env
+Disallow: /admin
+Disallow: /config
+Disallow: /deploy
+Disallow: /wp-admin/
+Disallow: /wp-content/
+Disallow: /wp-includes/
+Disallow: /.git/
+
+# Allow search engines to index the main page
+Allow: /
+
+# Crawl delay (seconds between requests)
+Crawl-delay: 10
+
+# Sitemap (optional - add if you create one)
+# Sitemap: https://lights-monitor.com/sitemap.xml

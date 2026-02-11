@@ -148,13 +148,3 @@ func (h *Handlers) GetHistory(c *fiber.Ctx) error {
 	})
 }
 
-// GetStats returns global statistics.
-func (h *Handlers) GetStats(c *fiber.Ctx) error {
-	ctx := context.Background()
-	stats, err := h.DB.GetStats(ctx)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load stats"})
-	}
-	c.Set("Cache-Control", "public, max-age=15")
-	return c.JSON(stats)
-}

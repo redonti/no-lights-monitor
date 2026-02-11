@@ -25,7 +25,7 @@ func Load() *Config {
 		BaseURL:          getEnv("BASE_URL", "http://localhost:8080"),
 		GraphServiceURL:  getEnv("GRAPH_SERVICE_URL", "http://localhost:8000"),
 		PingInterval:     getEnvInt("PING_INTERVAL", 300),
-		OfflineThreshold: getEnvInt("OFFLINE_THRESHOLD", 600),
+		OfflineThreshold: getEnvInt("OFFLINE_THRESHOLD", 300),
 	}
 }
 

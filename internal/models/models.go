@@ -40,12 +40,6 @@ type MonitorPublic struct {
 	ChannelName    string  `json:"channel_name,omitempty"`
 }
 
-type Stats struct {
-	MonitorsCount int   `json:"monitors_count"`
-	UsersCount    int   `json:"users_count"`
-	RequestsCount int64 `json:"requests_count"`
-}
-
 // StatusEvent is a historical record of a power status change (ON→OFF or OFF→ON).
 type StatusEvent struct {
 	ID        int64     `json:"id"`

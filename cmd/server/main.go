@@ -101,7 +101,6 @@ func main() {
 	api.Get("/ping/:token", h.Ping)
 	api.Get("/monitors", h.GetMonitors)
 	api.Get("/monitors/:id/history", h.GetHistory)
-	api.Get("/stats", h.GetStats)
 
 	// Serve static frontend files
 	app.Static("/", "./web")

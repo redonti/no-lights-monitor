@@ -1,6 +1,6 @@
 # No-Lights Monitor
 
-A community-powered power outage monitoring system. Devices ping a unique URL every 5 minutes ? when pings stop, the system notifies a Telegram channel that the power is off. When pings resume, it notifies that power is back on. A real-time web map shows all monitored locations with green (on) and red (off) markers.
+A community-powered power outage monitoring system. Devices ping a unique URL every 5 minutes — when pings stop, the system notifies a Telegram channel that the power is off. When pings resume, it notifies that power is back on. A web map shows all monitored locations with green (on) and red (off) markers.
 
 ## Architecture
 
@@ -9,11 +9,12 @@ A community-powered power outage monitoring system. Devices ping a unique URL ev
                                   |                                  |
                               [PostgreSQL]                      [Subscribers]
                               [Redis cache]
+                              [Graph service]
                                   |
-                              [Web Frontend] -- real-time map via WebSocket
+                              [Web Frontend] -- map via HTTP polling
 ```
 
-**Tech stack:** Go (Fiber), PostgreSQL, Redis, Leaflet.js, Telegram Bot API
+**Tech stack:** Go (Fiber), PostgreSQL, Redis, Leaflet.js, Telegram Bot API, Python (graph service)
 
 ## Quick Start
 
@@ -38,7 +39,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-This starts PostgreSQL and Redis.
+This starts PostgreSQL, Redis, graph service, and nginx. For local dev without SSL certs, run only infra: `docker compose up -d postgres redis`. Set `REDIS_PASSWORD` in `.env`.
 
 ### 3. Run the server
 
@@ -51,8 +52,7 @@ The server starts on `http://localhost:8080`:
 - **Live map:** http://localhost:8080/map.html
 - **Ping endpoint:** `GET /api/ping/{token}`
 - **Monitors API:** `GET /api/monitors`
-- **Stats API:** `GET /api/stats`
-- **WebSocket:** `ws://localhost:8080/ws`
+- **Monitors history:** `GET /api/monitors/:id/history`
 
 ### 4. Register a monitor via Telegram
 
@@ -67,9 +67,9 @@ The server starts on `http://localhost:8080`:
 1. Your device sends `GET /api/ping/{token}` every 5 minutes
 2. The server records the heartbeat in Redis (sub-millisecond)
 3. A background checker runs every 30 seconds
-4. If no ping is received for 10 minutes (2x interval) ? power is OFF ? Telegram notification
-5. When the next ping arrives ? power is ON ? Telegram notification
-6. All status changes are broadcast to the web map via WebSocket
+4. If no ping is received for 5 minutes — power is OFF — Telegram notification
+5. When the next ping arrives — power is ON — Telegram notification
+6. The web map polls the API every 30 seconds for status updates
 
 ## Monitoring Devices
 
@@ -92,24 +92,13 @@ Example with curl:
 |---|---|---|
 | `/api/ping/:token` | GET | Heartbeat ping from monitoring device |
 | `/api/monitors` | GET | List all monitors with status (for map) |
-| `/api/stats` | GET | Global statistics |
-| `/ws` | WebSocket | Real-time status change stream |
+| `/api/monitors/:id/history` | GET | Status event history for a monitor |
 
-## Production deployment (HTTPS)
+## Production deployment
 
-When the app is behind nginx with HTTPS:
-
-1. **On the server**, set the public URL in the env file used by Docker (e.g. `/opt/no-lights-monitor/.env`):
-
-   ```bash
-   BASE_URL=https://yourdomain.com
-   ```
-
-   The app still listens on `PORT=8080`; nginx terminates HTTPS and proxies to `http://127.0.0.1:8080`. `BASE_URL` is used when the Telegram bot sends the ping URL to users, so it must be the public HTTPS URL.
-
-2. **Deploy** as usual (e.g. push to `main` for GitHub Actions). The workflow uses `--env-file /opt/no-lights-monitor/.env`, so any variables you set there (including `BASE_URL`, `BOT_TOKEN`, `DATABASE_URL`, etc.) are applied on each deploy.
-
-3. **Optional:** Add `GRAPH_SERVICE_URL` if the graph service runs on the same host (e.g. `http://localhost:8000` or your internal URL).
+- Set `BASE_URL=https://yourdomain.com` in the server env (e.g. `/opt/no-lights-monitor/.env`)
+- nginx proxies HTTPS to the app; config in `deploy/nginx.conf`
+- GitHub Actions deploy uses `--env-file /opt/no-lights-monitor/.env`
 
 ## Development
 

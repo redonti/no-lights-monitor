@@ -34,19 +34,6 @@
     </div>
   </section>
 
-  <section class="stats">
-    <div class="container stats-grid">
-      <div class="stat-card">
-        <span class="stat-number" id="stat-monitors">—</span>
-        <span class="stat-label">Локацій</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-number" id="stat-users">—</span>
-        <span class="stat-label">Користувачів</span>
-      </div>
-    </div>
-  </section>
-
   <section class="how-it-works" id="how-it-works">
     <div class="container">
       <h2>Як це працює</h2>
@@ -90,20 +77,5 @@
       <span>Моніторинг електроенергії</span>
     </div>
   </footer>
-
-  <script>
-    async function loadStats() {
-      try {
-        const res = await fetch('/api/stats');
-        const data = await res.json();
-        document.getElementById('stat-monitors').textContent = data.monitors_count.toLocaleString();
-        document.getElementById('stat-users').textContent = data.users_count.toLocaleString();
-      } catch (e) {
-        // stats unavailable
-      }
-    }
-    loadStats();
-    setInterval(loadStats, 30000);
-  </script>
 </body>
 </html>

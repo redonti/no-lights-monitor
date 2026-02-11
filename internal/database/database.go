@@ -73,13 +73,6 @@ func (db *DB) Migrate(ctx context.Context) error {
 
 	CREATE INDEX IF NOT EXISTS idx_status_events_monitor_time
 		ON status_events (monitor_id, timestamp DESC);
-
-	CREATE TABLE IF NOT EXISTS stats (
-		id             INT PRIMARY KEY DEFAULT 1,
-		request_count  BIGINT NOT NULL DEFAULT 0
-	);
-
-	INSERT INTO stats (id, request_count) VALUES (1, 0) ON CONFLICT DO NOTHING;
 	`
 	_, err := db.Pool.Exec(ctx, sql)
 	return err
@@ -289,27 +282,6 @@ func (db *DB) UpdateMonitorHeartbeat(ctx context.Context, id int64, at time.Time
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE monitors SET last_heartbeat_at = $2 WHERE id = $1
 	`, id, at)
-	return err
-}
-
-// GetStats returns global statistics.
-func (db *DB) GetStats(ctx context.Context) (*models.Stats, error) {
-	var s models.Stats
-	err := db.Pool.QueryRow(ctx, `
-		SELECT
-			(SELECT COUNT(*) FROM monitors),
-			(SELECT COUNT(*) FROM users),
-			(SELECT request_count FROM stats WHERE id = 1)
-	`).Scan(&s.MonitorsCount, &s.UsersCount, &s.RequestsCount)
-	if err != nil {
-		return nil, err
-	}
-	return &s, nil
-}
-
-// IncrementRequests atomically bumps the global request counter.
-func (db *DB) IncrementRequests(ctx context.Context) error {
-	_, err := db.Pool.Exec(ctx, `UPDATE stats SET request_count = request_count + 1 WHERE id = 1`)
 	return err
 }
 

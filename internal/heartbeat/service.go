@@ -201,13 +201,7 @@ func (s *Service) StartChecker(ctx context.Context, intervalSec int) {
 
 func (s *Service) checkAll(ctx context.Context) {
 	now := time.Now()
-
-	// Grace period: don't mark monitors offline until we've been running
-	// for at least one threshold period. This prevents false notifications
-	// after system restart when monitors are still alive but haven't pinged yet.
-	if now.Sub(s.startupTime) < s.threshold {
-		return // still in grace period, skip this check
-	}
+	inGracePeriod := now.Sub(s.startupTime) < s.threshold
 
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)
@@ -251,8 +245,9 @@ func (s *Service) checkAll(ctx context.Context) {
 
 		// Re-check current state after re-acquiring lock (in case it changed during I/O).
 		// In practice, checkAll is single-threaded, but this is more robust.
-		if info.IsOnline && !isFresh {
+		if info.IsOnline && !isFresh && !inGracePeriod {
 			// Online → Offline transition.
+			// Skip during grace period to prevent false offline notifications after system restart.
 			duration = now.Sub(info.LastChange)
 			info.IsOnline = false
 			info.LastChange = now
@@ -260,6 +255,7 @@ func (s *Service) checkAll(ctx context.Context) {
 			isNowOnline = false
 		} else if !info.IsOnline && isFresh {
 			// Offline → Online transition.
+			// Allow during grace period - monitors coming online is always good!
 			duration = now.Sub(info.LastChange)
 			info.IsOnline = true
 			info.LastChange = now

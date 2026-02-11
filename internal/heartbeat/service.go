@@ -2,9 +2,12 @@ package heartbeat
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/database"
@@ -216,55 +219,76 @@ func (s *Service) checkAll(ctx context.Context) {
 			info.mu.Unlock()
 			return true
 		}
-		// Skip already offline monitors.
-		if !info.IsOnline {
-			info.mu.Unlock()
-			return true
-		}
 
-		// Capture monitor ID for cache lookup (can be done outside lock, but kept here for clarity).
+		// Capture monitor ID for cache lookup.
 		monitorID := info.ID
 		info.mu.Unlock()
 
 		// Check heartbeat in cache (outside lock - this is an I/O operation).
 		lastHB, err := s.cache.GetHeartbeat(ctx, monitorID)
 		if err != nil {
-			return true
+			if errors.Is(err, redis.Nil) {
+				// Redis key doesn't exist (new monitor, Redis restarted and lost data).
+				// Treat as very old heartbeat so monitor will be marked offline if it hasn't pinged.
+				lastHB = time.Time{} // Zero time (Unix epoch)
+			} else {
+				// Redis connection error or other issue.
+				// Skip this monitor to avoid false offline notifications during Redis outages.
+				log.Printf("[heartbeat] redis error for monitor %d: %v", monitorID, err)
+				return true
+			}
 		}
 
-		// Check if threshold exceeded and update state.
+		// Determine if heartbeat is fresh or stale.
+		isFresh := now.Sub(lastHB) <= s.threshold
+
+		// Lock again to update state if needed.
 		info.mu.Lock()
-		// Double-check IsOnline in case it changed while we were checking cache.
-		if !info.IsOnline {
-			info.mu.Unlock()
-			return true
-		}
 
-		isStale := now.Sub(lastHB) > s.threshold
-		var onlineDuration time.Duration
-		if isStale {
-			onlineDuration = now.Sub(info.LastChange)
+		var statusChanged bool
+		var isNowOnline bool
+		var duration time.Duration
+
+		// Re-check current state after re-acquiring lock (in case it changed during I/O).
+		// In practice, checkAll is single-threaded, but this is more robust.
+		if info.IsOnline && !isFresh {
+			// Online → Offline transition.
+			duration = now.Sub(info.LastChange)
 			info.IsOnline = false
 			info.LastChange = now
+			statusChanged = true
+			isNowOnline = false
+		} else if !info.IsOnline && isFresh {
+			// Offline → Online transition.
+			duration = now.Sub(info.LastChange)
+			info.IsOnline = true
+			info.LastChange = now
+			statusChanged = true
+			isNowOnline = true
 		}
+
 		// Capture values for async operations.
 		monitorName := info.Name
 		channelID := info.ChannelID
 		info.mu.Unlock()
 
 		// Perform expensive operations outside the lock.
-		if isStale {
+		if statusChanged {
 			go func() {
-				if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, false); err != nil {
+				if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, isNowOnline); err != nil {
 					log.Printf("[heartbeat] failed to update status for monitor %d: %v", monitorID, err)
 				}
 			}()
 
 			if s.notifier != nil && channelID != 0 {
-				go s.notifier.NotifyStatusChange(channelID, monitorName, false, onlineDuration)
+				go s.notifier.NotifyStatusChange(channelID, monitorName, isNowOnline, duration)
 			}
 
-			log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", monitorID, monitorName, database.FormatDuration(onlineDuration))
+			if isNowOnline {
+				log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(duration))
+			} else {
+				log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", monitorID, monitorName, database.FormatDuration(duration))
+			}
 		}
 
 		return true

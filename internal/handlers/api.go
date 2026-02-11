@@ -82,6 +82,15 @@ func (h *Handlers) PingAPI(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "cache error"})
 	}
 
+	// Update last_heartbeat_at in database (async, non-blocking).
+	// This is used for display in Telegram bot /info command.
+	go func() {
+		if err := h.DB.UpdateMonitorHeartbeat(context.Background(), monitor.ID, now); err != nil {
+			// Don't fail the request if DB update fails - heartbeat is already in Redis.
+			// Just log for debugging.
+		}
+	}()
+
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 

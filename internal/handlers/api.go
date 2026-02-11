@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/heartbeat"
 	"no-lights-monitor/internal/models"
@@ -16,7 +17,8 @@ import (
 
 type Handlers struct {
 	DB           *database.DB
-	HeartbeatSvc *heartbeat.Service
+	Cache        *cache.Cache          // For API service (stateless ping)
+	HeartbeatSvc *heartbeat.Service    // For Worker service (stateful ping)
 
 	// In-memory response cache for /api/monitors.
 	monitorCache   []byte
@@ -35,7 +37,7 @@ const (
 	MaxHistoryRange = 30 * 24 * time.Hour
 )
 
-// Ping handles GET /api/ping/:token -- the core heartbeat endpoint.
+// Ping handles GET /api/ping/:token -- for Worker service (stateful with in-memory state).
 func (h *Handlers) Ping(c *fiber.Ctx) error {
 	token := c.Params("token")
 	if token == "" {
@@ -45,6 +47,39 @@ func (h *Handlers) Ping(c *fiber.Ctx) error {
 	ctx := context.Background()
 	if ok := h.HeartbeatSvc.HandlePing(ctx, token); !ok {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "unknown token"})
+	}
+
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+// PingAPI handles GET /api/ping/:token -- for API service (stateless, DB + Redis only).
+// This version validates the token against the database and writes to Redis.
+// The Worker service is responsible for checking Redis and detecting offline monitors.
+func (h *Handlers) PingAPI(c *fiber.Ctx) error {
+	token := c.Params("token")
+	if token == "" {
+		return c.SendStatus(fiber.StatusBadRequest)
+	}
+
+	ctx := context.Background()
+
+	// Validate token by looking up monitor in database.
+	monitor, err := h.DB.GetMonitorByToken(ctx, token)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "unknown token"})
+	}
+
+	// Skip if monitoring is paused.
+	if !monitor.IsActive {
+		return c.JSON(fiber.Map{"status": "paused"})
+	}
+
+	// Write heartbeat timestamp to Redis.
+	now := time.Now()
+	if err := h.Cache.SetHeartbeat(ctx, monitor.ID, now); err != nil {
+		// Log error but don't fail the request - Redis is not critical for accepting pings.
+		// The Worker will handle status changes based on what's in Redis.
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "cache error"})
 	}
 
 	return c.JSON(fiber.Map{"status": "ok"})

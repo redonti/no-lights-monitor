@@ -201,7 +201,10 @@ func (s *Service) StartChecker(ctx context.Context, intervalSec int) {
 
 func (s *Service) checkAll(ctx context.Context) {
 	now := time.Now()
-	inGracePeriod := now.Sub(s.startupTime) < s.threshold
+	// Grace period is 2x threshold to survive deploy downtime.
+	// During deploy, API may be down for several minutes (Go build on small servers),
+	// so pings don't reach Redis. We need to wait long enough for pings to resume.
+	inGracePeriod := now.Sub(s.startupTime) < 2*s.threshold
 
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)

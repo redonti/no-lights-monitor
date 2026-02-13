@@ -17,6 +17,9 @@ jobs:
           script: |
             cd /opt/lights-monitor/no-lights-monitor
             git pull origin main
-            docker compose build
+            docker compose build --parallel
+            docker compose up -d --no-recreate redis postgres
             docker compose up -d
+            docker compose restart nginx
+            docker image prune -f
             echo "Deploy completed at $(date)"

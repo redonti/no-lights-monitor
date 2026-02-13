@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,16 +24,20 @@ type conversationState int
 
 const (
 	stateIdle conversationState = iota
+	stateAwaitingType
+	stateAwaitingPingTarget
 	stateAwaitingAddress
 	stateAwaitingChannel
 )
 
 type conversationData struct {
-	State     conversationState
-	Name      string
-	Address   string
-	Latitude  float64
-	Longitude float64
+	State       conversationState
+	MonitorType string // "heartbeat" or "ping"
+	PingTarget  string // IP/hostname for ping monitors
+	Name        string
+	Address     string
+	Latitude    float64
+	Longitude   float64
 }
 
 // GraphUpdater is used to trigger a graph update for a newly created monitor.
@@ -299,6 +304,12 @@ func (b *Bot) handleCallback(c tele.Context) error {
 	}
 
 	action := parts[0]
+
+	// Handle create_type callback (no monitor ID needed).
+	if action == "create_type" {
+		return b.onCreateType(c, parts[1])
+	}
+
 	monitorID, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
 		return c.Respond(&tele.CallbackResponse{Text: "Невірний ID монітора"})
@@ -384,9 +395,16 @@ func (b *Bot) handleCallback(c tele.Context) error {
 			bld.WriteString("\n")
 		}
 
-		bld.WriteString(fmt.Sprintf("<b>🔗 URL для пінгу:</b>\n"))
-		bld.WriteString(fmt.Sprintf("<code>%s/api/ping/%s</code>\n\n", b.baseURL, targetMonitor.Token))
-		bld.WriteString("<i>Налаштуйте ваш пристрій відправляти GET-запити на цей URL кожні 5 хвилин.</i>")
+		if targetMonitor.MonitorType == "ping" {
+			bld.WriteString(fmt.Sprintf("<b>🌐 Тип:</b> Server Ping\n"))
+			bld.WriteString(fmt.Sprintf("<b>🎯 Ціль:</b> <code>%s</code>\n\n", html.EscapeString(targetMonitor.PingTarget)))
+			bld.WriteString("<i>Сервер автоматично пінгує цю адресу кожні 5 хвилин.</i>")
+		} else {
+			bld.WriteString(fmt.Sprintf("<b>📡 Тип:</b> ESP Heartbeat\n"))
+			bld.WriteString(fmt.Sprintf("<b>🔗 URL для пінгу:</b>\n"))
+			bld.WriteString(fmt.Sprintf("<code>%s/api/ping/%s</code>\n\n", b.baseURL, targetMonitor.Token))
+			bld.WriteString("<i>Налаштуйте ваш пристрій відправляти GET-запити на цей URL кожні 5 хвилин.</i>")
+		}
 
 		return c.Send(bld.String(), htmlOpts)
 
@@ -539,17 +557,23 @@ func (b *Bot) handleCreate(c tele.Context) error {
 	}
 
 	b.mu.Lock()
-	b.conversations[c.Sender().ID] = &conversationData{State: stateAwaitingAddress}
+	b.conversations[c.Sender().ID] = &conversationData{State: stateAwaitingType}
 	b.mu.Unlock()
 
 	msg := `Налаштуємо новий монітор!
 
-<b>Крок 1/2:</b> Введіть адресу вашої локації.
-Наприклад: <code>Київ, Хрещатик 1</code>
+<b>Крок 1/3:</b> Оберіть тип моніторингу:`
 
-Або надішліть геопозицію через 📎 → Геопозиція.`
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{
+		{
+			{Text: "📡 ESP або смартфон", Data: "create_type:heartbeat"},
+		},
+		{
+			{Text: "🌐 Пінг айпі роутера", Data: "create_type:ping"},
+		},
+	}}
 
-	return c.Send(msg, htmlOpts)
+	return c.Send(msg, tele.ModeHTML, keyboard)
 }
 
 // ── Text handler (router) ────────────────────────────────────────────
@@ -564,6 +588,8 @@ func (b *Bot) handleText(c tele.Context) error {
 	}
 
 	switch conv.State {
+	case stateAwaitingPingTarget:
+		return b.onPingTarget(c, conv)
 	case stateAwaitingAddress:
 		return b.onAddress(c, conv)
 	case stateAwaitingChannel:
@@ -572,7 +598,85 @@ func (b *Bot) handleText(c tele.Context) error {
 	return nil
 }
 
-// ── Step 1: Address ──────────────────────────────────────────────────
+// ── Step 1: Monitor type (callback) ──────────────────────────────────
+
+func (b *Bot) onCreateType(c tele.Context, monitorType string) error {
+	b.mu.RLock()
+	conv, exists := b.conversations[c.Sender().ID]
+	b.mu.RUnlock()
+
+	if !exists || conv.State != stateAwaitingType {
+		return c.Respond(&tele.CallbackResponse{Text: "Почніть заново через /create"})
+	}
+
+	_ = c.Respond(&tele.CallbackResponse{})
+
+	b.mu.Lock()
+	conv.MonitorType = monitorType
+	b.mu.Unlock()
+
+	if monitorType == "ping" {
+		b.mu.Lock()
+		conv.State = stateAwaitingPingTarget
+		b.mu.Unlock()
+
+		return c.Send(`<b>Крок 2/4:</b> Введіть IP-адресу або hostname для пінгу.
+Наприклад: <code>93.75.123.45</code> або <code>myrouter.ddns.net</code>
+
+⚠️ Потрібна біла (публічна) IP-адреса. Сірі IP (за NAT провайдера) не працюватимуть.`, htmlOpts)
+	}
+
+	// Heartbeat — go directly to address step.
+	b.mu.Lock()
+	conv.State = stateAwaitingAddress
+	b.mu.Unlock()
+
+	return c.Send(`<b>Крок 2/3:</b> Введіть адресу вашої локації.
+Наприклад: <code>Київ, Хрещатик 1</code>
+
+Або надішліть геопозицію через 📎 → Геопозиція.`, htmlOpts)
+}
+
+// ── Step 2 (ping only): Ping target ─────────────────────────────────
+
+func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
+	target := strings.TrimSpace(c.Text())
+	if len(target) < 3 {
+		return c.Send("Занадто коротко. Введіть IP-адресу або hostname.", htmlOpts)
+	}
+
+	// Validate: resolve the hostname to check it's reachable.
+	ips, err := net.LookupHost(target)
+	if err != nil {
+		return c.Send(fmt.Sprintf("Не вдалося знайти хост <code>%s</code>. Перевірте адресу і спробуйте ще раз.", html.EscapeString(target)), htmlOpts)
+	}
+
+	// Check for private IPs.
+	ip := net.ParseIP(ips[0])
+	if ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()) {
+		return c.Send("Ця IP-адреса є приватною (локальною). Потрібна публічна IP-адреса.", htmlOpts)
+	}
+
+	// Test ICMP ping to verify the host is reachable.
+	_ = c.Send(fmt.Sprintf("🔍 Перевіряю доступність <code>%s</code>...", html.EscapeString(target)), htmlOpts)
+	if !b.heartbeatSvc.PingHost(target) {
+		return c.Send(fmt.Sprintf("❌ Хост <code>%s</code> не відповідає на ICMP ping.\nПереконайтесь, що роутер дозволяє ICMP і спробуйте ще раз.", html.EscapeString(target)), htmlOpts)
+	}
+
+	b.mu.Lock()
+	conv.PingTarget = target
+	conv.State = stateAwaitingAddress
+	b.mu.Unlock()
+
+	_ = c.Send(fmt.Sprintf("✅ Хост доступний: <code>%s</code> → <code>%s</code>", html.EscapeString(target), ips[0]), htmlOpts)
+
+	return c.Send(`<b>Крок 3/4:</b> Введіть адресу вашої локації.
+Наприклад: <code>Київ, Хрещатик 1</code>
+
+Або надішліть геопозицію через 📎 → Геопозиція.`, htmlOpts)
+}
+
+// ── Step: Address ────────────────────────────────────────────────────
 
 func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 	text := strings.TrimSpace(c.Text())
@@ -593,7 +697,7 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 			conv.Longitude = lng
 			conv.State = stateAwaitingChannel
 			b.mu.Unlock()
-			return c.Send(b.channelStepMessage(lat, lng), htmlOpts)
+			return c.Send(b.channelStepMessage(conv), htmlOpts)
 		}
 	}
 
@@ -619,7 +723,7 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 	b.mu.Unlock()
 
 	_ = c.Send(fmt.Sprintf("Знайдено: <b>%s</b>", html.EscapeString(result.DisplayName)), htmlOpts)
-	return c.Send(b.channelStepMessage(result.Latitude, result.Longitude), htmlOpts)
+	return c.Send(b.channelStepMessage(conv), htmlOpts)
 }
 
 // ── GPS location handler ─────────────────────────────────────────────
@@ -648,17 +752,21 @@ func (b *Bot) handleLocation(c tele.Context) error {
 	conv.State = stateAwaitingChannel
 	b.mu.Unlock()
 
-	return c.Send(b.channelStepMessage(float64(loc.Lat), float64(loc.Lng)), htmlOpts)
+	return c.Send(b.channelStepMessage(conv), htmlOpts)
 }
 
 // ── Step 2: Channel ──────────────────────────────────────────────────
 
-func (b *Bot) channelStepMessage(lat, lng float64) string {
+func (b *Bot) channelStepMessage(conv *conversationData) string {
+	step := "3/3"
+	if conv.MonitorType == "ping" {
+		step = "4/4"
+	}
 	return fmt.Sprintf(`Геопозицію встановлено: <code>%.5f, %.5f</code>
 
-<b>Крок 2/2:</b> Створіть Telegram-канал і додайте мене як адміністратора з правом "Публікація повідомлень".
+<b>Крок %s:</b> Створіть Telegram-канал і додайте мене як адміністратора з правом "Публікація повідомлень".
 
-Потім надішліть мені @username каналу (напр., @my_power_channel).`, lat, lng)
+Потім надішліть мені @username каналу (напр., @my_power_channel).`, conv.Latitude, conv.Longitude, step)
 }
 
 func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
@@ -694,7 +802,12 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 		return c.Send("Щось пішло не так. Спробуйте ще раз.")
 	}
 
-	monitor, err := b.db.CreateMonitor(ctx, user.ID, conv.Name, conv.Address, conv.Latitude, conv.Longitude, chat.ID, chat.Username)
+	monitorType := conv.MonitorType
+	if monitorType == "" {
+		monitorType = "heartbeat"
+	}
+
+	monitor, err := b.db.CreateMonitor(ctx, user.ID, conv.Name, conv.Address, conv.Latitude, conv.Longitude, chat.ID, chat.Username, monitorType, conv.PingTarget)
 	if err != nil {
 		log.Printf("[bot] create monitor error: %v", err)
 		return c.Send("Не вдалося створити монітор. Спробуйте ще раз.")
@@ -715,11 +828,31 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
 
-	pingURL := fmt.Sprintf("%s/api/ping/%s", b.baseURL, monitor.Token)
-
-	msg := fmt.Sprintf(`<b>Монітор налаштовано!</b>
+	var msg string
+	if monitorType == "ping" {
+		msg = fmt.Sprintf(`<b>Монітор налаштовано!</b>
 
 <b>Назва:</b> %s
+<b>Тип:</b> Server Ping
+<b>Ціль:</b> <code>%s</code>
+<b>Координати:</b> %.5f, %.5f
+<b>Канал:</b> @%s
+
+Сервер пінгуватиме <code>%s</code> кожні 5 хвилин.
+
+Коли пінги не проходять — я сповіщу канал, що світла немає. Коли відновляться — що світло повернулося.`,
+			html.EscapeString(monitor.Name),
+			html.EscapeString(monitor.PingTarget),
+			conv.Latitude, conv.Longitude,
+			html.EscapeString(chat.Username),
+			html.EscapeString(monitor.PingTarget),
+		)
+	} else {
+		pingURL := fmt.Sprintf("%s/api/ping/%s", b.baseURL, monitor.Token)
+		msg = fmt.Sprintf(`<b>Монітор налаштовано!</b>
+
+<b>Назва:</b> %s
+<b>Тип:</b> ESP Heartbeat
 <b>Координати:</b> %.5f, %.5f
 <b>Канал:</b> @%s
 
@@ -729,11 +862,12 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 Налаштуйте ваш пристрій надсилати GET-запит на це посилання кожні 5 хвилин.
 
 Коли пінги зупиняться — я сповіщу канал, що світла немає. Коли відновляться — що світло повернулося.`,
-		html.EscapeString(monitor.Name),
-		conv.Latitude, conv.Longitude,
-		html.EscapeString(chat.Username),
-		html.EscapeString(pingURL),
-	)
+			html.EscapeString(monitor.Name),
+			conv.Latitude, conv.Longitude,
+			html.EscapeString(chat.Username),
+			html.EscapeString(pingURL),
+		)
+	}
 
 	return c.Send(msg, htmlOpts)
 }

@@ -20,6 +20,8 @@ type Monitor struct {
 	Longitude          float64    `json:"longitude"`
 	ChannelID          int64      `json:"channel_id,omitempty"`
 	ChannelName        string     `json:"channel_name,omitempty"`
+	MonitorType        string     `json:"monitor_type"`  // "heartbeat" or "ping"
+	PingTarget         string     `json:"ping_target"`   // IP/hostname for ping monitors
 	IsOnline           bool       `json:"is_online"`
 	IsActive           bool       `json:"is_active"` // whether monitoring is enabled
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty"`

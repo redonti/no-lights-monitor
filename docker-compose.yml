@@ -74,6 +74,8 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     container_name: nolights-worker
+    cap_add:
+      - NET_RAW
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0

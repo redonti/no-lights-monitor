@@ -7,8 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.17.3
-	golang.org/x/image v0.36.0
-	gopkg.in/telebot.v3 v3.3.8
+	gopkg.in/telebot.v3 v3.0.1
 )
 
 require (

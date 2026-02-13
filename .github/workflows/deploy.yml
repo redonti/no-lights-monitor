@@ -17,6 +17,6 @@ jobs:
           script: |
             cd /opt/lights-monitor/no-lights-monitor
             git pull origin main
-            docker compose build worker api
-            docker compose up -d worker api
+            docker compose build
+            docker compose up -d
             echo "Deploy completed at $(date)"

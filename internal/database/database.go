@@ -37,6 +37,7 @@ func scanMonitor(scanner interface {
 	return scanner.Scan(
 		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
 		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
+		&m.MonitorType, &m.PingTarget,
 		&m.IsOnline, &m.IsActive, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
 		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
 	)
@@ -74,6 +75,8 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS graph_message_id INT NOT NULL DEFAULT 0;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS graph_week_start TIMESTAMPTZ;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS monitor_type TEXT NOT NULL DEFAULT 'heartbeat';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS ping_target TEXT NOT NULL DEFAULT '';
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_user_id ON monitors(user_id);
@@ -108,15 +111,16 @@ func (db *DB) UpsertUser(ctx context.Context, telegramID int64, username, firstN
 }
 
 // CreateMonitor inserts a new monitor and returns it (with generated token).
-func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address string, lat, lng float64, channelID int64, channelName string) (*models.Monitor, error) {
+func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address string, lat, lng float64, channelID int64, channelName, monitorType, pingTarget string) (*models.Monitor, error) {
 	var m models.Monitor
 	row := db.Pool.QueryRow(ctx, `
-		INSERT INTO monitors (user_id, name, address, latitude, longitude, channel_id, channel_name)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO monitors (user_id, name, address, latitude, longitude, channel_id, channel_name, monitor_type, ping_target)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, user_id, token, name, address, latitude, longitude,
-		          channel_id, channel_name, is_online, is_active, last_heartbeat_at,
+		          channel_id, channel_name, monitor_type, ping_target,
+		          is_online, is_active, last_heartbeat_at,
 		          last_status_change_at, graph_message_id, graph_week_start, created_at
-	`, userID, name, address, lat, lng, channelID, channelName)
+	`, userID, name, address, lat, lng, channelID, channelName, monitorType, pingTarget)
 	err := scanMonitor(row, &m)
 	if err != nil {
 		return nil, err
@@ -129,7 +133,8 @@ func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Moni
 	var m models.Monitor
 	row := db.Pool.QueryRow(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, is_online, is_active, last_heartbeat_at,
+		       channel_id, channel_name, monitor_type, ping_target,
+		       is_online, is_active, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors WHERE token = $1
 	`, token)
@@ -144,7 +149,8 @@ func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Moni
 func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
 		SELECT m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
-		       m.channel_id, m.channel_name, m.is_online, m.is_active, m.last_heartbeat_at,
+		       m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
+		       m.is_online, m.is_active, m.last_heartbeat_at,
 		       m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.created_at
 		FROM monitors m
 		JOIN users u ON u.id = m.user_id
@@ -171,7 +177,8 @@ func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]
 func (db *DB) GetAllMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, is_online, is_active, last_heartbeat_at,
+		       channel_id, channel_name, monitor_type, ping_target,
+		       is_online, is_active, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors ORDER BY id
 	`)
@@ -246,7 +253,8 @@ func (db *DB) UpdateGraphMessage(ctx context.Context, monitorID int64, messageID
 func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, is_online, is_active, last_heartbeat_at,
+		       channel_id, channel_name, monitor_type, ping_target,
+		       is_online, is_active, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors
 		WHERE channel_id IS NOT NULL AND channel_id != 0

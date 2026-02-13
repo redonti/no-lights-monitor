@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	probing "github.com/prometheus-community/pro-bing"
 	"github.com/redis/go-redis/v9"
 
 	"no-lights-monitor/internal/cache"
@@ -21,16 +22,18 @@ type Notifier interface {
 
 // monitorInfo is the in-memory representation used for fast ping lookups.
 type monitorInfo struct {
-	ID         int64
-	ChannelID  int64
-	Name       string
-	Address    string
-	Latitude   float64
-	Longitude  float64
-	IsOnline   bool
-	IsActive   bool // whether monitoring is enabled
-	LastChange time.Time
-	mu         sync.Mutex
+	ID          int64
+	ChannelID   int64
+	Name        string
+	Address     string
+	Latitude    float64
+	Longitude   float64
+	MonitorType string // "heartbeat" or "ping"
+	PingTarget  string // IP/hostname for ping monitors
+	IsOnline    bool
+	IsActive    bool // whether monitoring is enabled
+	LastChange  time.Time
+	mu          sync.Mutex
 }
 
 // Service handles heartbeat pings and offline detection.
@@ -70,15 +73,17 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 
 	for _, m := range monitors {
 		s.monitors.Store(m.Token, &monitorInfo{
-			ID:         m.ID,
-			ChannelID:  m.ChannelID,
-			Name:       m.Name,
-			Address:    m.Address,
-			Latitude:   m.Latitude,
-			Longitude:  m.Longitude,
-			IsOnline:   m.IsOnline,
-			IsActive:   m.IsActive,
-			LastChange: m.LastStatusChangeAt,
+			ID:          m.ID,
+			ChannelID:   m.ChannelID,
+			Name:        m.Name,
+			Address:     m.Address,
+			Latitude:    m.Latitude,
+			Longitude:   m.Longitude,
+			MonitorType: m.MonitorType,
+			PingTarget:  m.PingTarget,
+			IsOnline:    m.IsOnline,
+			IsActive:    m.IsActive,
+			LastChange:  m.LastStatusChangeAt,
 		})
 	}
 	log.Printf("[heartbeat] loaded %d monitors into memory (grace period: %s)", len(monitors), s.threshold)
@@ -88,15 +93,17 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 // RegisterMonitor adds a new monitor to the in-memory map (called after DB insert).
 func (s *Service) RegisterMonitor(m *models.Monitor) {
 	s.monitors.Store(m.Token, &monitorInfo{
-		ID:         m.ID,
-		ChannelID:  m.ChannelID,
-		Name:       m.Name,
-		Address:    m.Address,
-		Latitude:   m.Latitude,
-		Longitude:  m.Longitude,
-		IsOnline:   false,
-		IsActive:   m.IsActive,
-		LastChange: m.LastStatusChangeAt,
+		ID:          m.ID,
+		ChannelID:   m.ChannelID,
+		Name:        m.Name,
+		Address:     m.Address,
+		Latitude:    m.Latitude,
+		Longitude:   m.Longitude,
+		MonitorType: m.MonitorType,
+		PingTarget:  m.PingTarget,
+		IsOnline:    false,
+		IsActive:    m.IsActive,
+		LastChange:  m.LastStatusChangeAt,
 	})
 }
 
@@ -206,6 +213,34 @@ func (s *Service) checkAll(ctx context.Context) {
 	// so pings don't reach Redis. We need to wait long enough for pings to resume.
 	inGracePeriod := now.Sub(s.startupTime) < 2*s.threshold
 
+	// Phase 1: Execute all ICMP pings concurrently.
+	// This ensures even 100 ping monitors complete within ~5 seconds (ping timeout).
+	var wg sync.WaitGroup
+	s.monitors.Range(func(key, value any) bool {
+		info := value.(*monitorInfo)
+		info.mu.Lock()
+		if !info.IsActive || info.MonitorType != "ping" || info.PingTarget == "" {
+			info.mu.Unlock()
+			return true
+		}
+		monitorID := info.ID
+		pingTarget := info.PingTarget
+		info.mu.Unlock()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if s.PingHost(pingTarget) {
+				if err := s.cache.SetHeartbeat(ctx, monitorID, now); err != nil {
+					log.Printf("[heartbeat] redis set error for ping monitor %d: %v", monitorID, err)
+				}
+			}
+		}()
+		return true
+	})
+	wg.Wait()
+
+	// Phase 2: Check all monitors (both heartbeat and ping) for status changes.
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)
 
@@ -292,4 +327,20 @@ func (s *Service) checkAll(ctx context.Context) {
 
 		return true
 	})
+}
+
+// PingHost sends ICMP pings to the target and returns true if reachable.
+func (s *Service) PingHost(target string) bool {
+	pinger, err := probing.NewPinger(target)
+	if err != nil {
+		log.Printf("[heartbeat] failed to create pinger for %s: %v", target, err)
+		return false
+	}
+	pinger.Count = 3
+	pinger.Timeout = 5 * time.Second
+	pinger.SetPrivileged(true) // required in Docker (raw ICMP sockets)
+	if err := pinger.Run(); err != nil {
+		return false
+	}
+	return pinger.Statistics().PacketsRecv > 0
 }

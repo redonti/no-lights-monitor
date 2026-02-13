@@ -14,10 +14,11 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd /opt/lights-monitor/no-lights-monitor
             git pull origin main
-            docker compose build --parallel
+            docker compose build
             docker compose up -d --no-recreate redis postgres
             docker compose up -d
             docker compose restart nginx

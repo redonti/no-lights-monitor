@@ -249,7 +249,7 @@ func (b *Bot) handleStop(c tele.Context) error {
 	}
 
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Send(bld.String(), keyboard, htmlOpts)
+	return c.Send(bld.String(), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) handleResume(c tele.Context) error {
@@ -288,7 +288,7 @@ func (b *Bot) handleResume(c tele.Context) error {
 	}
 
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Send(bld.String(), keyboard, htmlOpts)
+	return c.Send(bld.String(), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) handleCallback(c tele.Context) error {
@@ -454,7 +454,7 @@ func (b *Bot) handleInfo(c tele.Context) error {
 	}
 
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Send(bld.String(), keyboard, htmlOpts)
+	return c.Send(bld.String(), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) handleTest(c tele.Context) error {
@@ -493,7 +493,7 @@ func (b *Bot) handleTest(c tele.Context) error {
 	}
 
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Send(bld.String(), keyboard, htmlOpts)
+	return c.Send(bld.String(), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) handleDelete(c tele.Context) error {
@@ -525,7 +525,7 @@ func (b *Bot) handleDelete(c tele.Context) error {
 	}
 
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Send(bld.String(), keyboard, htmlOpts)
+	return c.Send(bld.String(), tele.ModeHTML, keyboard)
 }
 
 // ── /create flow ─────────────────────────────────────────────────────

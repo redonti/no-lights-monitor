@@ -6,73 +6,82 @@
   <title>No-Lights Monitor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        }
+      }
+    }
+  </script>
 </head>
-<body>
+<body class="bg-stone-100 text-stone-900 leading-relaxed">
 
-  <header class="header">
-    <div class="container header-inner">
-      <a href="/" class="logo">No-Lights Monitor</a>
-      <nav class="nav">
-        <a href="#how-it-works">Як це працює</a>
-        <a href="/map.html" class="btn btn-sm btn-outline">Карта</a>
+  <header class="bg-white border-b border-stone-200 py-3.5">
+    <div class="max-w-3xl mx-auto px-5 flex items-center justify-between">
+      <a href="/" class="text-base font-semibold text-stone-900 no-underline">No-Lights Monitor</a>
+      <nav class="flex items-center gap-5">
+        <a href="#how-it-works" class="text-stone-500 text-sm hover:text-stone-900 no-underline">Як це працює</a>
+        <a href="/map.html" class="bg-white border border-stone-200 hover:border-blue-600 hover:text-blue-600 text-stone-600 px-4 py-1.5 rounded-lg text-sm font-medium no-underline transition-colors">Карта</a>
       </nav>
     </div>
   </header>
 
-  <section class="hero">
-    <div class="container">
-      <h1>Дізнайся, коли зникає світло.</h1>
-      <p class="hero-sub">
+  <section class="pt-18 pb-14 max-sm:pt-12 max-sm:pb-9">
+    <div class="max-w-3xl mx-auto px-5">
+      <h1 class="text-4xl max-sm:text-2xl font-bold tracking-tight leading-tight mb-3.5">Дізнайся, коли зникає світло.</h1>
+      <p class="text-base text-stone-600 mb-8 max-w-lg">
         Моніторинг електроенергії вдома чи в офісі. Миттєві сповіщення в Telegram,
         коли світло зникає — і коли повертається.
       </p>
-      <div class="hero-actions">
-        <a href="https://t.me/no_lights_monitor_bot" class="btn btn-primary" id="bot-link">Налаштувати монітор</a>
-        <a href="/map.html" class="btn btn-outline">Переглянути карту</a>
+      <div class="flex gap-3 flex-wrap">
+        <a href="https://t.me/no_lights_monitor_bot" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium no-underline transition-colors">Налаштувати монітор</a>
+        <a href="/map.html" class="bg-white border border-stone-200 hover:border-blue-600 hover:text-blue-600 text-stone-600 px-6 py-2.5 rounded-lg font-medium no-underline transition-colors">Переглянути карту</a>
       </div>
     </div>
   </section>
 
-  <section class="how-it-works" id="how-it-works">
-    <div class="container">
-      <h2>Як це працює</h2>
-      <div class="steps">
-        <div class="step">
-          <div class="step-number">1</div>
-          <div class="step-content">
-            <h3>Реєстрація через Telegram</h3>
-            <p>Запустіть нашого бота, вкажіть місцезнаходження та створіть канал для сповіщень.</p>
+  <section id="how-it-works" class="py-12 pb-10">
+    <div class="max-w-3xl mx-auto px-5">
+      <h2 class="text-xl font-semibold mb-6">Як це працює</h2>
+      <div class="flex flex-col gap-3">
+        <div class="flex gap-4 items-start bg-white border border-stone-200 rounded-xl p-5">
+          <div class="shrink-0 w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center font-semibold text-sm text-stone-500">1</div>
+          <div>
+            <h3 class="text-sm font-semibold text-stone-900 mb-0.5">Реєстрація через Telegram</h3>
+            <p class="text-sm text-stone-500">Запустіть нашого бота, вкажіть місцезнаходження та створіть канал для сповіщень.</p>
           </div>
         </div>
-        <div class="step">
-          <div class="step-number">2</div>
-          <div class="step-content">
-            <h3>Підключіть пристрій</h3>
-            <p>Будь-який пристрій, що може робити HTTP-запити — старий телефон, ESP32, Raspberry Pi. Він пінгує наш сервер кожні 5 хвилин, поки є електрика.</p>
+        <div class="flex gap-4 items-start bg-white border border-stone-200 rounded-xl p-5">
+          <div class="shrink-0 w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center font-semibold text-sm text-stone-500">2</div>
+          <div>
+            <h3 class="text-sm font-semibold text-stone-900 mb-0.5">Підключіть пристрій</h3>
+            <p class="text-sm text-stone-500">Будь-який пристрій, що може робити HTTP-запити — старий телефон, ESP32, Raspberry Pi. Він пінгує наш сервер кожні 5 хвилин, поки є електрика.</p>
           </div>
         </div>
-        <div class="step">
-          <div class="step-number">3</div>
-          <div class="step-content">
-            <h3>Отримуйте сповіщення</h3>
-            <p>Коли пінги зупиняються — світла немає. Ваш Telegram-канал одразу отримує сповіщення. Так само, коли світло повертається.</p>
+        <div class="flex gap-4 items-start bg-white border border-stone-200 rounded-xl p-5">
+          <div class="shrink-0 w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center font-semibold text-sm text-stone-500">3</div>
+          <div>
+            <h3 class="text-sm font-semibold text-stone-900 mb-0.5">Отримуйте сповіщення</h3>
+            <p class="text-sm text-stone-500">Коли пінги зупиняються — світла немає. Ваш Telegram-канал одразу отримує сповіщення. Так само, коли світло повертається.</p>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="map-preview">
-    <div class="container">
-      <h2>Карта в реальному часі</h2>
-      <p>Кожен маркер — це точка моніторингу. <span class="green">Зелений</span> — світло є. <span class="red">Червоний</span> — світла немає.</p>
-      <a href="/map.html" class="btn btn-outline">Відкрити карту</a>
+  <section class="py-10 pb-12">
+    <div class="max-w-3xl mx-auto px-5">
+      <h2 class="text-xl font-semibold mb-2">Карта в реальному часі</h2>
+      <p class="text-stone-600 text-sm mb-5">Кожен маркер — це точка моніторингу. <span class="text-green-600 font-medium">Зелений</span> — світло є. <span class="text-red-600 font-medium">Червоний</span> — світла немає.</p>
+      <a href="/map.html" class="bg-white border border-stone-200 hover:border-blue-600 hover:text-blue-600 text-stone-600 px-6 py-2.5 rounded-lg font-medium no-underline transition-colors inline-block">Відкрити карту</a>
     </div>
   </section>
 
-  <footer class="footer">
-    <div class="container footer-inner">
+  <footer class="border-t border-stone-200 py-8">
+    <div class="max-w-3xl mx-auto px-5 flex justify-between items-center text-stone-500 text-xs max-sm:flex-col max-sm:gap-1">
       <span>No-Lights Monitor</span>
       <span>Моніторинг електроенергії</span>
     </div>

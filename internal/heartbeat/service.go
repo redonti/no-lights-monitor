@@ -17,7 +17,7 @@ import (
 
 // Notifier sends Telegram messages on status changes.
 type Notifier interface {
-	NotifyStatusChange(channelID int64, name string, isOnline bool, duration time.Duration)
+	NotifyStatusChange(channelID int64, name string, isOnline bool, duration time.Duration, when time.Time)
 }
 
 // monitorInfo is the in-memory representation used for fast ping lookups.
@@ -171,7 +171,7 @@ func (s *Service) HandlePing(ctx context.Context, token string) bool {
 
 		// Notify Telegram channel.
 		if s.notifier != nil && channelID != 0 {
-			go s.notifier.NotifyStatusChange(channelID, monitorName, true, offlineDuration)
+			go s.notifier.NotifyStatusChange(channelID, monitorName, true, offlineDuration, now)
 		}
 
 		log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(offlineDuration))
@@ -315,7 +315,7 @@ func (s *Service) checkAll(ctx context.Context) {
 			}()
 
 			if s.notifier != nil && channelID != 0 {
-				go s.notifier.NotifyStatusChange(channelID, monitorName, isNowOnline, duration)
+				go s.notifier.NotifyStatusChange(channelID, monitorName, isNowOnline, duration, now)
 			}
 
 			if isNowOnline {

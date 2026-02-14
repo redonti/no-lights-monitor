@@ -128,50 +128,18 @@ func (b *Bot) registerHandlers() {
 // ── Commands ─────────────────────────────────────────────────────────
 
 func (b *Bot) handleStart(c tele.Context) error {
-	msg := `<b>Вітаю в No-Lights Monitor!</b>
-
-Я допоможу моніторити стан електроенергії у вашому домі та сповіщати Telegram-канал, коли світло зникає або повертається.
-
-/create - Налаштувати новий монітор
-/status - Перевірити стан моніторів
-/info - Детальна інформація та URL для пінгу
-/test - Відправити тестове повідомлення
-/stop - Призупинити моніторинг
-/resume - Відновити моніторинг
-/delete - Видалити монітор
-/help - Детальніше`
-
-	return c.Send(msg, htmlOpts)
+	return c.Send(msgStart, htmlOpts)
 }
 
 func (b *Bot) handleHelp(c tele.Context) error {
-	msg := `<b>Як це працює:</b>
-
-1. Використайте /create для реєстрації нового монітора
-2. Вкажіть адресу — я автоматично знайду координати
-3. Створіть Telegram-канал і додайте мене як адміністратора
-4. Я дам вам унікальне посилання для пінгу
-5. Ваш пристрій пінгує це посилання кожні 5 хвилин
-6. Якщо пінги зупиняються — я сповіщаю канал, що світла немає
-7. Коли пінги відновлюються — сповіщаю, що світло є
-
-<b>Команди:</b>
-/status — переглянути всі монітори
-/info — детальна інформація та URL для пінгу
-/test — відправити тестове повідомлення в канал
-/stop — призупинити моніторинг (не буде сповіщень)
-/resume — відновити призупинений монітор
-/delete — видалити монітор назавжди
-/cancel — скасувати поточну операцію`
-
-	return c.Send(msg, htmlOpts)
+	return c.Send(msgHelp, htmlOpts)
 }
 
 func (b *Bot) handleCancel(c tele.Context) error {
 	b.mu.Lock()
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
-	return c.Send("Операцію скасовано.")
+	return c.Send(msgCancelled)
 }
 
 func (b *Bot) handleStatus(c tele.Context) error {
@@ -179,26 +147,26 @@ func (b *Bot) handleStatus(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors by telegram_id error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+		return c.Send(msgError)
 	}
 
 	if len(monitors) == 0 {
-		return c.Send("У вас ще немає моніторів.\n\nСтворіть перший через /create")
+		return c.Send(msgNoMonitors)
 	}
 
 	now := time.Now()
 	var bld strings.Builder
-	bld.WriteString("<b>Ваші монітори</b>\n\n")
+	bld.WriteString(msgStatusHeader)
 
 	for i, m := range monitors {
 		dur := now.Sub(m.LastStatusChangeAt)
 		durStr := database.FormatDuration(dur)
-		status := "🔴 Світла немає"
+		status := msgStatusOffline
 		if m.IsOnline {
-			status = "⚡ Світло є"
+			status = msgStatusOnline
 		}
 		if !m.IsActive {
-			status = "⏸ Призупинено"
+			status = msgStatusPaused
 		}
 		bld.WriteString(fmt.Sprintf("<b>%d.</b> %s\n", i+1, html.EscapeString(m.Name)))
 		bld.WriteString(fmt.Sprintf("   %s\n", html.EscapeString(m.Address)))
@@ -213,7 +181,7 @@ func (b *Bot) handleStatus(c tele.Context) error {
 		bld.WriteString("\n")
 	}
 
-	bld.WriteString("/create — додати новий монітор")
+	bld.WriteString(msgStatusFooter)
 
 	return c.Send(bld.String(), htmlOpts)
 }
@@ -223,7 +191,7 @@ func (b *Bot) handleStop(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+		return c.Send(msgError)
 	}
 
 	// Filter only active monitors.
@@ -235,12 +203,11 @@ func (b *Bot) handleStop(c tele.Context) error {
 	}
 
 	if len(active) == 0 {
-		return c.Send("У вас немає активних моніторів для зупинки.\n\nВикористайте /resume, щоб відновити призупинені монітори.")
+		return c.Send(msgNoActiveMonitors)
 	}
 
 	var bld strings.Builder
-	bld.WriteString("<b>Призупинити моніторинг</b>\n\n")
-	bld.WriteString("Оберіть монітор для зупинки:\n\n")
+	bld.WriteString(msgStopHeader)
 
 	rows := make([][]tele.InlineButton, 0, len(active))
 	for i, m := range active {
@@ -262,7 +229,7 @@ func (b *Bot) handleResume(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+		return c.Send(msgError)
 	}
 
 	// Filter only inactive monitors.
@@ -274,12 +241,11 @@ func (b *Bot) handleResume(c tele.Context) error {
 	}
 
 	if len(inactive) == 0 {
-		return c.Send("У вас немає призупинених моніторів.\n\nВикористайте /stop, щоб призупинити монітор.")
+		return c.Send(msgNoInactiveMonitors)
 	}
 
 	var bld strings.Builder
-	bld.WriteString("<b>Відновити моніторинг</b>\n\n")
-	bld.WriteString("Оберіть монітор для відновлення:\n\n")
+	bld.WriteString(msgResumeHeader)
 
 	rows := make([][]tele.InlineButton, 0, len(inactive))
 	for i, m := range inactive {
@@ -300,7 +266,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 	data := c.Callback().Data
 	parts := strings.Split(data, ":")
 	if len(parts) != 2 {
-		return c.Respond(&tele.CallbackResponse{Text: "Невірний формат"})
+		return c.Respond(&tele.CallbackResponse{Text: msgInvalidFormat})
 	}
 
 	action := parts[0]
@@ -312,7 +278,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 
 	monitorID, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return c.Respond(&tele.CallbackResponse{Text: "Невірний ID монітора"})
+		return c.Respond(&tele.CallbackResponse{Text: msgInvalidMonitor})
 	}
 
 	ctx := context.Background()
@@ -321,7 +287,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors error: %v", err)
-		return c.Respond(&tele.CallbackResponse{Text: "Помилка отримання даних"})
+		return c.Respond(&tele.CallbackResponse{Text: msgFetchError})
 	}
 
 	var targetMonitor *models.Monitor
@@ -333,55 +299,52 @@ func (b *Bot) handleCallback(c tele.Context) error {
 	}
 
 	if targetMonitor == nil {
-		return c.Respond(&tele.CallbackResponse{Text: "Монітор не знайдено"})
+		return c.Respond(&tele.CallbackResponse{Text: msgMonitorNotFound})
 	}
 
 	switch action {
 	case "stop":
 		if err := b.db.SetMonitorActive(ctx, monitorID, false); err != nil {
 			log.Printf("[bot] set monitor inactive error: %v", err)
-			return c.Respond(&tele.CallbackResponse{Text: "Помилка зупинки моніторингу"})
+			return c.Respond(&tele.CallbackResponse{Text: msgStopError})
 		}
 		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, false)
-		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Моніторинг призупинено"})
-		return c.Send(fmt.Sprintf("✅ Моніторинг <b>%s</b> призупинено.\n\nВідновити можна через /resume", html.EscapeString(targetMonitor.Name)), htmlOpts)
+		_ = c.Respond(&tele.CallbackResponse{Text: msgStopOK})
+		return c.Send(fmt.Sprintf("%s <b>%s</b> призупинено.\n\nВідновити можна через /resume", msgStopOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "resume":
 		if err := b.db.SetMonitorActive(ctx, monitorID, true); err != nil {
 			log.Printf("[bot] set monitor active error: %v", err)
-			return c.Respond(&tele.CallbackResponse{Text: "Помилка відновлення моніторингу"})
+			return c.Respond(&tele.CallbackResponse{Text: msgResumeError})
 		}
 		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, true)
-		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Моніторинг відновлено"})
-		return c.Send(fmt.Sprintf("✅ Моніторинг <b>%s</b> відновлено.\n\nПризупинити можна через /stop", html.EscapeString(targetMonitor.Name)), htmlOpts)
+		_ = c.Respond(&tele.CallbackResponse{Text: msgResumeOK})
+		return c.Send(fmt.Sprintf("%s <b>%s</b> відновлено.\n\nПризупинити можна через /stop", msgResumeOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "delete_confirm":
-		// Delete the monitor from database
 		if err := b.db.DeleteMonitor(ctx, monitorID); err != nil {
 			log.Printf("[bot] delete monitor error: %v", err)
-			return c.Respond(&tele.CallbackResponse{Text: "Помилка видалення монітора"})
+			return c.Respond(&tele.CallbackResponse{Text: msgDeleteError})
 		}
-		// Remove from heartbeat service memory
 		b.heartbeatSvc.RemoveMonitor(targetMonitor.Token)
-		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Монітор видалено"})
-		return c.Send(fmt.Sprintf("✅ Монітор <b>%s</b> успішно видалено.", html.EscapeString(targetMonitor.Name)), htmlOpts)
+		_ = c.Respond(&tele.CallbackResponse{Text: msgDeleteOK})
+		return c.Send(fmt.Sprintf("%s <b>%s</b> успішно видалено.", msgDeleteOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "info":
-		// Show detailed information about the monitor
 		_ = c.Respond(&tele.CallbackResponse{})
 
 		var bld strings.Builder
-		bld.WriteString(fmt.Sprintf("<b>📊 Інформація про монітор</b>\n\n"))
+		bld.WriteString("<b>📊 Інформація про монітор</b>\n\n")
 		bld.WriteString(fmt.Sprintf("🏷 <b>Назва:</b> %s\n", html.EscapeString(targetMonitor.Name)))
 		bld.WriteString(fmt.Sprintf("📍 <b>Адреса:</b> %s\n", html.EscapeString(targetMonitor.Address)))
 		bld.WriteString(fmt.Sprintf("🌐 <b>Координати:</b> %.6f, %.6f\n\n", targetMonitor.Latitude, targetMonitor.Longitude))
 
-		status := "🔴 Офлайн"
+		status := msgInfoStatusOffline
 		if targetMonitor.IsOnline {
-			status = "⚡ Онлайн"
+			status = msgInfoStatusOnline
 		}
 		if !targetMonitor.IsActive {
-			status = "⏸ Призупинено"
+			status = msgStatusPaused
 		}
 		bld.WriteString(fmt.Sprintf("<b>Статус:</b> %s\n", status))
 
@@ -396,22 +359,21 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		}
 
 		if targetMonitor.MonitorType == "ping" {
-			bld.WriteString(fmt.Sprintf("<b>🌐 Тип:</b> Server Ping\n"))
+			bld.WriteString(fmt.Sprintf("<b>🌐 Тип:</b> %s\n", msgInfoTypePing))
 			bld.WriteString(fmt.Sprintf("<b>🎯 Ціль:</b> <code>%s</code>\n\n", html.EscapeString(targetMonitor.PingTarget)))
-			bld.WriteString("<i>Сервер автоматично пінгує цю адресу кожні 5 хвилин.</i>")
+			bld.WriteString(msgInfoPingHint)
 		} else {
-			bld.WriteString(fmt.Sprintf("<b>📡 Тип:</b> ESP Heartbeat\n"))
-			bld.WriteString(fmt.Sprintf("<b>🔗 URL для пінгу:</b>\n"))
+			bld.WriteString(fmt.Sprintf("<b>📡 Тип:</b> %s\n", msgInfoTypeHeartbeat))
+			bld.WriteString("<b>🔗 URL для пінгу:</b>\n")
 			bld.WriteString(fmt.Sprintf("<code>%s/api/ping/%s</code>\n\n", b.baseURL, targetMonitor.Token))
-			bld.WriteString("<i>Налаштуйте ваш пристрій відправляти GET-запити на цей URL кожні 5 хвилин.</i>")
+			bld.WriteString(msgInfoHeartbeatHint)
 		}
 
 		return c.Send(bld.String(), htmlOpts)
 
 	case "test":
-		// Send test notification to channel
 		if targetMonitor.ChannelID == 0 {
-			return c.Respond(&tele.CallbackResponse{Text: "У цього монітора немає каналу"})
+			return c.Respond(&tele.CallbackResponse{Text: msgTestNoChannel})
 		}
 
 		testMsg := fmt.Sprintf(
@@ -426,14 +388,14 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		chat := &tele.Chat{ID: targetMonitor.ChannelID}
 		if _, err := b.bot.Send(chat, testMsg, htmlOpts); err != nil {
 			log.Printf("[bot] test notification error: %v", err)
-			return c.Respond(&tele.CallbackResponse{Text: "Помилка відправки тестового повідомлення"})
+			return c.Respond(&tele.CallbackResponse{Text: msgTestSendError})
 		}
 
-		_ = c.Respond(&tele.CallbackResponse{Text: "✅ Тест відправлено"})
-		return c.Send(fmt.Sprintf("✅ Тестове повідомлення відправлено в канал <b>@%s</b>", html.EscapeString(targetMonitor.ChannelName)), htmlOpts)
+		_ = c.Respond(&tele.CallbackResponse{Text: msgTestOK})
+		return c.Send(fmt.Sprintf("%s відправлено в канал <b>@%s</b>", msgTestOK, html.EscapeString(targetMonitor.ChannelName)), htmlOpts)
 
 	default:
-		return c.Respond(&tele.CallbackResponse{Text: "Невідома дія"})
+		return c.Respond(&tele.CallbackResponse{Text: msgUnknownAction})
 	}
 }
 
@@ -442,24 +404,24 @@ func (b *Bot) handleInfo(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+		return c.Send(msgError)
 	}
 
 	if len(monitors) == 0 {
-		return c.Send("У вас ще немає моніторів.\n\nСтворіть перший через /create")
+		return c.Send(msgNoMonitors)
 	}
 
 	var bld strings.Builder
-	bld.WriteString("<b>Детальна інформація про монітори</b>\n\n")
+	bld.WriteString(msgInfoHeader)
 
 	rows := make([][]tele.InlineButton, 0, len(monitors))
 	for i, m := range monitors {
-		status := "🔴 Офлайн"
+		status := msgInfoStatusOffline
 		if m.IsOnline {
-			status = "⚡ Онлайн"
+			status = msgInfoStatusOnline
 		}
 		if !m.IsActive {
-			status = "⏸ Призупинено"
+			status = msgStatusPaused
 		}
 
 		bld.WriteString(fmt.Sprintf("<b>%d.</b> %s - %s\n", i+1, html.EscapeString(m.Name), status))
@@ -480,7 +442,7 @@ func (b *Bot) handleTest(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+		return c.Send(msgError)
 	}
 
 	// Filter monitors with channels
@@ -492,12 +454,11 @@ func (b *Bot) handleTest(c tele.Context) error {
 	}
 
 	if len(withChannels) == 0 {
-		return c.Send("У вас немає моніторів з налаштованими каналами.\n\nСпочатку створіть монітор через /create та вкажіть канал.")
+		return c.Send(msgNoTestChannels)
 	}
 
 	var bld strings.Builder
-	bld.WriteString("<b>Надіслати тестове повідомлення</b>\n\n")
-	bld.WriteString("Оберіть монітор для відправки тесту:\n\n")
+	bld.WriteString(msgTestHeader)
 
 	rows := make([][]tele.InlineButton, 0, len(withChannels))
 	for i, m := range withChannels {
@@ -519,17 +480,15 @@ func (b *Bot) handleDelete(c tele.Context) error {
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
 		log.Printf("[bot] get monitors error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте пізніше.")
+		return c.Send(msgError)
 	}
 
 	if len(monitors) == 0 {
-		return c.Send("У вас немає моніторів для видалення.")
+		return c.Send(msgNoMonitorsDelete)
 	}
 
 	var bld strings.Builder
-	bld.WriteString("<b>⚠️ Видалення монітора</b>\n\n")
-	bld.WriteString("Оберіть монітор для видалення:\n\n")
-	bld.WriteString("<i>Увага: ця дія незворотна! Всі дані про історію статусу будуть втрачені.</i>\n\n")
+	bld.WriteString(msgDeleteHeader)
 
 	rows := make([][]tele.InlineButton, 0, len(monitors))
 	for i, m := range monitors {
@@ -553,27 +512,23 @@ func (b *Bot) handleCreate(c tele.Context) error {
 	_, err := b.db.UpsertUser(ctx, c.Sender().ID, c.Sender().Username, c.Sender().FirstName)
 	if err != nil {
 		log.Printf("[bot] upsert user error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте ще раз.")
+		return c.Send(msgErrorRetry)
 	}
 
 	b.mu.Lock()
 	b.conversations[c.Sender().ID] = &conversationData{State: stateAwaitingType}
 	b.mu.Unlock()
 
-	msg := `Налаштуємо новий монітор!
-
-<b>Крок 1/3:</b> Оберіть тип моніторингу:`
-
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{
 		{
-			{Text: "📡 ESP або смартфон", Data: "create_type:heartbeat"},
+			{Text: msgCreateBtnHeartbeat, Data: "create_type:heartbeat"},
 		},
 		{
-			{Text: "🌐 Пінг айпі роутера", Data: "create_type:ping"},
+			{Text: msgCreateBtnPing, Data: "create_type:ping"},
 		},
 	}}
 
-	return c.Send(msg, tele.ModeHTML, keyboard)
+	return c.Send(msgCreateStep1, tele.ModeHTML, keyboard)
 }
 
 // ── Text handler (router) ────────────────────────────────────────────
@@ -606,7 +561,7 @@ func (b *Bot) onCreateType(c tele.Context, monitorType string) error {
 	b.mu.RUnlock()
 
 	if !exists || conv.State != stateAwaitingType {
-		return c.Respond(&tele.CallbackResponse{Text: "Почніть заново через /create"})
+		return c.Respond(&tele.CallbackResponse{Text: msgStartOverRequired})
 	}
 
 	_ = c.Respond(&tele.CallbackResponse{})
@@ -620,10 +575,7 @@ func (b *Bot) onCreateType(c tele.Context, monitorType string) error {
 		conv.State = stateAwaitingPingTarget
 		b.mu.Unlock()
 
-		return c.Send(`<b>Крок 2/4:</b> Введіть IP-адресу або hostname для пінгу.
-Наприклад: <code>93.75.123.45</code> або <code>myrouter.ddns.net</code>
-
-⚠️ Потрібна біла (публічна) IP-адреса. Сірі IP (за NAT провайдера) не працюватимуть.`, htmlOpts)
+		return c.Send(msgPingTargetStep, htmlOpts)
 	}
 
 	// Heartbeat — go directly to address step.
@@ -631,10 +583,7 @@ func (b *Bot) onCreateType(c tele.Context, monitorType string) error {
 	conv.State = stateAwaitingAddress
 	b.mu.Unlock()
 
-	return c.Send(`<b>Крок 2/3:</b> Введіть адресу вашої локації.
-Наприклад: <code>Київ, Хрещатик 1</code>
-
-Або надішліть геопозицію через 📎 → Геопозиція.`, htmlOpts)
+	return c.Send(msgAddressStepHeartbeat, htmlOpts)
 }
 
 // ── Step 2 (ping only): Ping target ─────────────────────────────────
@@ -642,7 +591,7 @@ func (b *Bot) onCreateType(c tele.Context, monitorType string) error {
 func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 	target := strings.TrimSpace(c.Text())
 	if len(target) < 3 {
-		return c.Send("Занадто коротко. Введіть IP-адресу або hostname.", htmlOpts)
+		return c.Send(msgPingTargetTooShort, htmlOpts)
 	}
 
 	// Validate: resolve the hostname to check it's reachable.
@@ -654,7 +603,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 	// Check for private IPs.
 	ip := net.ParseIP(ips[0])
 	if ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()) {
-		return c.Send("Ця IP-адреса є приватною (локальною). Потрібна публічна IP-адреса.", htmlOpts)
+		return c.Send(msgPingTargetPrivate, htmlOpts)
 	}
 
 	// Test ICMP ping to verify the host is reachable.
@@ -670,10 +619,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 
 	_ = c.Send(fmt.Sprintf("✅ Хост доступний: <code>%s</code> → <code>%s</code>", html.EscapeString(target), ips[0]), htmlOpts)
 
-	return c.Send(`<b>Крок 3/4:</b> Введіть адресу вашої локації.
-Наприклад: <code>Київ, Хрещатик 1</code>
-
-Або надішліть геопозицію через 📎 → Геопозиція.`, htmlOpts)
+	return c.Send(msgAddressStepPing, htmlOpts)
 }
 
 // ── Step: Address ────────────────────────────────────────────────────
@@ -681,7 +627,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 	text := strings.TrimSpace(c.Text())
 	if len(text) < 3 {
-		return c.Send("Занадто коротко. Введіть адресу, наприклад: <code>Київ, Хрещатик 1</code>", htmlOpts)
+		return c.Send(msgAddressTooShort, htmlOpts)
 	}
 
 	// Check if user typed raw coordinates (lat, lng).
@@ -702,15 +648,15 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 	}
 
 	// Geocode the address.
-	_ = c.Send("🔍 Шукаю адресу...")
+	_ = c.Send(msgSearchingAddress)
 
 	result, err := geocode.Search(context.Background(), text)
 	if err != nil {
 		log.Printf("[bot] geocode error: %v", err)
-		return c.Send("Не вдалося знайти адресу. Спробуйте ввести інакше або надішліть геопозицію через 📎.")
+		return c.Send(msgGeocodeError)
 	}
 	if result == nil {
-		return c.Send("Адресу не знайдено. Спробуйте ввести точнішу адресу, наприклад: <code>Київ, вул. Хрещатик, 1</code>", htmlOpts)
+		return c.Send(msgAddressNotFound, htmlOpts)
 	}
 
 	// Store geocoded data and proceed to channel step.
@@ -784,22 +730,22 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 	me := b.bot.Me
 	member, err := b.bot.ChatMemberOf(chat, me)
 	if err != nil {
-		return c.Send("Не вдалося перевірити мої права в цьому каналі. Переконайтеся, що я доданий як адміністратор.")
+		return c.Send(msgChannelCheckError)
 	}
 
 	if member.Role != tele.Administrator && member.Role != tele.Creator {
-		return c.Send("Я не адміністратор цього каналу. Додайте мене як адміна з правом \"Публікація повідомлень\" і спробуйте ще раз.")
+		return c.Send(msgChannelNotAdmin)
 	}
 
 	if !member.Rights.CanPostMessages {
-		return c.Send("У мене немає права \"Публікація повідомлень\" в цьому каналі. Оновіть мої права адміна і спробуйте ще раз.")
+		return c.Send(msgChannelNoPost)
 	}
 
 	ctx := context.Background()
 	user, err := b.db.UpsertUser(ctx, c.Sender().ID, c.Sender().Username, c.Sender().FirstName)
 	if err != nil {
 		log.Printf("[bot] upsert user error: %v", err)
-		return c.Send("Щось пішло не так. Спробуйте ще раз.")
+		return c.Send(msgErrorRetry)
 	}
 
 	monitorType := conv.MonitorType
@@ -810,7 +756,7 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 	monitor, err := b.db.CreateMonitor(ctx, user.ID, conv.Name, conv.Address, conv.Latitude, conv.Longitude, chat.ID, chat.Username, monitorType, conv.PingTarget)
 	if err != nil {
 		log.Printf("[bot] create monitor error: %v", err)
-		return c.Send("Не вдалося створити монітор. Спробуйте ще раз.")
+		return c.Send(msgErrorRetry)
 	}
 
 	b.heartbeatSvc.RegisterMonitor(monitor)
@@ -884,15 +830,15 @@ func NewNotifier(b *tele.Bot) *TelegramNotifier {
 }
 
 // NotifyStatusChange sends a status message to the linked Telegram channel.
-func (n *TelegramNotifier) NotifyStatusChange(channelID int64, name string, isOnline bool, duration time.Duration) {
+func (n *TelegramNotifier) NotifyStatusChange(channelID int64, name string, isOnline bool, duration time.Duration, when time.Time) {
 	var msg string
 	dur := database.FormatDuration(duration)
-	escapedName := html.EscapeString(name)
+	timeStr := when.Format("15:04")
 
 	if isOnline {
-		msg = fmt.Sprintf("⚡ <b>Світло є</b>\n%s\n<i>(не було %s)</i>", escapedName, dur)
+		msg = fmt.Sprintf(msgNotifyOnline, timeStr, dur)
 	} else {
-		msg = fmt.Sprintf("🔴 <b>Світла немає</b>\n%s\n<i>(було %s)</i>", escapedName, dur)
+		msg = fmt.Sprintf(msgNotifyOffline, timeStr, dur)
 	}
 
 	chat := &tele.Chat{ID: channelID}

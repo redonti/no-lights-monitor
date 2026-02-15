@@ -64,6 +64,14 @@ func main() {
 	api.Get("/monitors", h.GetMonitors)
 	api.Get("/monitors/:id/history", h.GetHistory)
 
+	// Admin routes (protected by HTTP Basic Auth)
+	if cfg.AdminLogin != "" && cfg.AdminPassword != "" {
+		admin := app.Group("/admin", handlers.BasicAuth(cfg.AdminLogin, cfg.AdminPassword))
+		admin.Get("/", h.AdminPage)
+		admin.Get("/api/users", h.AdminGetUsers)
+		admin.Get("/api/monitors", h.AdminGetMonitors)
+	}
+
 	// Serve static frontend files
 	app.Static("/", "./web")
 

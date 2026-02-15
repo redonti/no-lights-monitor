@@ -61,6 +61,8 @@ services:
       PORT: 8080
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      ADMIN_LOGIN: ${ADMIN_LOGIN}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     depends_on:
       - postgres
       - redis

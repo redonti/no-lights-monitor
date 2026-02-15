@@ -1,4 +1,4 @@
-.PHONY: dev build run infra infra-down migrate
+.PHONY: dev build run infra infra-down
 
 # Start infrastructure (PostgreSQL + Redis)
 infra:
@@ -8,14 +8,14 @@ infra:
 infra-down:
 	docker compose down
 
-# Run in development mode
+# Run API service in development mode
 dev:
-	go run ./cmd/server
+	go run ./cmd/api
 
-# Build binary
+# Build API binary
 build:
-	go build -o bin/server ./cmd/server
+	go build -o bin/api ./cmd/api
 
 # Run built binary
 run: build
-	./bin/server
+	./bin/api

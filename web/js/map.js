@@ -138,15 +138,61 @@ function updateStats(total, online, offline) {
 
 // --- Svitlobot integration ---
 const SVITLOBOT_API = 'https://api.svitlobot.in.ua/website/getChannelsForMap';
-const svitlobotMarkers = {};
 const svitlobotClusterGroup = L.markerClusterGroup({
   maxClusterRadius: 50,
   spiderfyOnMaxZoom: true,
   showCoverageOnHover: false,
   disableClusteringAtZoom: 14,
+  animate: true,
+  chunkedLoading: true,
 });
 map.addLayer(svitlobotClusterGroup);
 let svitlobotVisible = true;
+let svitlobotActiveMarkers = {}; // currently visible markers by id
+
+// --- Spatial grid index ---
+const GRID_CELL_SIZE = 0.5; // degrees
+let spatialGrid = {};
+
+function gridKey(lat, lng) {
+  return Math.floor(lat / GRID_CELL_SIZE) + ':' + Math.floor(lng / GRID_CELL_SIZE);
+}
+
+function buildSpatialGrid(points) {
+  spatialGrid = {};
+  for (const point of points) {
+    const key = gridKey(point.lat, point.lng);
+    if (!spatialGrid[key]) spatialGrid[key] = [];
+    spatialGrid[key].push(point);
+  }
+}
+
+function getPointsInBounds(bounds) {
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+
+  const minRow = Math.floor(south / GRID_CELL_SIZE);
+  const maxRow = Math.floor(north / GRID_CELL_SIZE);
+  const minCol = Math.floor(west / GRID_CELL_SIZE);
+  const maxCol = Math.floor(east / GRID_CELL_SIZE);
+
+  const result = [];
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      const cell = spatialGrid[row + ':' + col];
+      if (cell) {
+        for (const point of cell) {
+          if (bounds.contains([point.lat, point.lng])) {
+            result.push(point);
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
 
 function parseSvitlobotData(raw) {
   const points = [];
@@ -187,81 +233,121 @@ function parseSvitlobotData(raw) {
   return points;
 }
 
-function createSvitlobotMarker(point) {
-  let color, statusText;
-  if (point.light_status === 1) {
-    color = COLORS.online;
-    statusText = 'Світло є';
-  } else if (point.light_status === 2) {
-    color = COLORS.offline;
-    statusText = 'Світла немає';
-  } else {
-    color = '#f59e0b';
-    statusText = 'Тех. перерва';
-  }
-
-  const size = 18;
-  const icon = L.divIcon({
+// Cached icons — only 2 variants needed.
+const svitlobotIcons = {
+  1: L.divIcon({
     className: '',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    html: `<div style="
-      width:${size}px;height:${size}px;
-      background:${color};
-      border:3px solid white;
-      transform:rotate(45deg);
-      box-shadow:0 4px 12px rgba(0,0,0,0.8);
-    "></div>`,
-  });
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    html: `<div style="width:18px;height:18px;background:${COLORS.online};border:3px solid white;transform:rotate(45deg);box-shadow:0 4px 12px rgba(0,0,0,0.8);"></div>`,
+  }),
+  2: L.divIcon({
+    className: '',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    html: `<div style="width:18px;height:18px;background:${COLORS.offline};border:3px solid white;transform:rotate(45deg);box-shadow:0 4px 12px rgba(0,0,0,0.8);"></div>`,
+  }),
+};
+
+function createSvitlobotMarker(point) {
+  const icon = svitlobotIcons[point.light_status] || svitlobotIcons[2];
   const marker = L.marker([point.lat, point.lng], { icon });
 
-  const channelLink = point.channel
-    ? `<div style="margin-top:6px;font-size:0.8em;"><a href="https://t.me/${escapeHtml(point.channel)}" target="_blank" style="color:#0ea5e9;text-decoration:none;">@${escapeHtml(point.channel)}</a> (${escapeHtml(point.subscribers)})</div>`
-    : '';
-  const groupInfo = point.group
-    ? `<div style="font-size:0.8em;color:#78716c;">${escapeHtml(point.group)}</div>`
-    : '';
+  // Lazy popup — only build HTML on first click.
+  marker.on('click', function () {
+    if (marker.getPopup()) return;
 
-  marker.bindPopup(`
-    <div style="font-family:Inter,system-ui,sans-serif;min-width:170px;line-height:1.5;">
-      <div style="font-weight:600;font-size:0.95em;">${escapeHtml(point.name)}</div>
-      <div style="font-weight:500;color:${color};">${statusText}</div>
-      ${groupInfo}
-      ${channelLink}
-      <div style="margin-top:4px;font-size:0.7em;color:#a8a29e;">svitlobot</div>
-    </div>
-  `);
+    const color = point.light_status === 1 ? COLORS.online : COLORS.offline;
+    const statusText = point.light_status === 1 ? 'Світло є' : 'Світла немає';
+    const channelLink = point.channel
+      ? `<div style="margin-top:6px;font-size:0.8em;"><a href="https://t.me/${escapeHtml(point.channel)}" target="_blank" style="color:#0ea5e9;text-decoration:none;">@${escapeHtml(point.channel)}</a> (${escapeHtml(point.subscribers)})</div>`
+      : '';
+    const groupInfo = point.group
+      ? `<div style="font-size:0.8em;color:#78716c;">${escapeHtml(point.group)}</div>`
+      : '';
+
+    marker.bindPopup(`
+      <div style="font-family:Inter,system-ui,sans-serif;min-width:170px;line-height:1.5;">
+        <div style="font-weight:600;font-size:0.95em;">${escapeHtml(point.name)}</div>
+        <div style="font-weight:500;color:${color};">${statusText}</div>
+        ${groupInfo}
+        ${channelLink}
+        <div style="margin-top:4px;font-size:0.7em;color:#a8a29e;">svitlobot</div>
+      </div>
+    `).openPopup();
+  });
 
   return marker;
+}
+
+function renderSvitlobotViewport() {
+  if (!svitlobotVisible || Object.keys(spatialGrid).length === 0) return;
+
+  const bounds = map.getBounds().pad(0.3);
+  const visiblePoints = getPointsInBounds(bounds);
+
+  const toAdd = [];
+  const newActive = {};
+  const visibleIds = new Set();
+
+  for (const point of visiblePoints) {
+    visibleIds.add(point.id);
+    const existing = svitlobotActiveMarkers[point.id];
+    if (existing) {
+      newActive[point.id] = existing;
+    } else {
+      const marker = createSvitlobotMarker(point);
+      newActive[point.id] = marker;
+      toAdd.push(marker);
+    }
+  }
+
+  // Remove markers no longer in view.
+  const toRemove = [];
+  for (const id in svitlobotActiveMarkers) {
+    if (!visibleIds.has(id)) {
+      toRemove.push(svitlobotActiveMarkers[id]);
+    }
+  }
+
+  if (toRemove.length) svitlobotClusterGroup.removeLayers(toRemove);
+  if (toAdd.length) svitlobotClusterGroup.addLayers(toAdd);
+  svitlobotActiveMarkers = newActive;
+}
+
+// Debounce to avoid rapid re-renders during panning.
+let renderTimeout = null;
+function debouncedRender() {
+  if (renderTimeout) clearTimeout(renderTimeout);
+  renderTimeout = setTimeout(renderSvitlobotViewport, 150);
 }
 
 async function loadSvitlobot() {
   try {
     const res = await fetch(SVITLOBOT_API);
     const raw = await res.text();
-    const points = parseSvitlobotData(raw);
+    const allPoints = parseSvitlobotData(raw);
+    buildSpatialGrid(allPoints);
 
     let sbOnline = 0;
     let sbOffline = 0;
-
-    for (const point of points) {
-      const existing = svitlobotMarkers[point.id];
-      if (existing) {
-        svitlobotClusterGroup.removeLayer(existing);
-      }
-      const marker = createSvitlobotMarker(point);
-      svitlobotMarkers[point.id] = marker;
-      svitlobotClusterGroup.addLayer(marker);
-
-      if (point.is_online) sbOnline++;
+    for (const p of allPoints) {
+      if (p.is_online) sbOnline++;
       else sbOffline++;
     }
+    updateSvitlobotStats(allPoints.length, sbOnline, sbOffline);
 
-    updateSvitlobotStats(points.length, sbOnline, sbOffline);
+    // Clear old markers and render for current viewport.
+    svitlobotClusterGroup.clearLayers();
+    svitlobotActiveMarkers = {};
+    renderSvitlobotViewport();
   } catch (e) {
     console.error('Failed to load Svitlobot data:', e);
   }
 }
+
+// Re-render on pan/zoom (debounced).
+map.on('moveend', debouncedRender);
 
 function updateSvitlobotStats(total, online, offline) {
   let badge = document.getElementById('svitlobot-stats');
@@ -287,6 +373,7 @@ document.getElementById('toggle-svitlobot').addEventListener('change', function 
   svitlobotVisible = this.checked;
   if (svitlobotVisible) {
     map.addLayer(svitlobotClusterGroup);
+    renderSvitlobotViewport();
     const badge = document.getElementById('svitlobot-stats');
     if (badge) badge.style.display = '';
   } else {

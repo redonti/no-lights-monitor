@@ -110,6 +110,28 @@ func (db *DB) UpsertUser(ctx context.Context, telegramID int64, username, firstN
 	return &u, nil
 }
 
+// GetAllUsers returns every user in the database.
+func (db *DB) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT id, telegram_id, username, first_name, created_at
+		FROM users ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(&u.ID, &u.TelegramID, &u.Username, &u.FirstName, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, &u)
+	}
+	return users, nil
+}
+
 // CreateMonitor inserts a new monitor and returns it (with generated token).
 func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address string, lat, lng float64, channelID int64, channelName, monitorType, pingTarget string) (*models.Monitor, error) {
 	var m models.Monitor

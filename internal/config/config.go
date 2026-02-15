@@ -21,6 +21,8 @@ type Config struct {
 	GraphServiceURL  string
 	PingInterval     int // expected seconds between pings
 	OfflineThreshold int // seconds without ping before marking offline
+	AdminLogin       string
+	AdminPassword    string
 }
 
 func Load() *Config {
@@ -33,6 +35,8 @@ func Load() *Config {
 		GraphServiceURL:  getEnv("GRAPH_SERVICE_URL", "http://localhost:8000"),
 		PingInterval:     getEnvInt("PING_INTERVAL", DefaultPingIntervalSec),
 		OfflineThreshold: getEnvInt("OFFLINE_THRESHOLD", DefaultOfflineThresholdSec),
+		AdminLogin:       getEnv("ADMIN_LOGIN", ""),
+		AdminPassword:    getEnv("ADMIN_PASSWORD", ""),
 	}
 }
 

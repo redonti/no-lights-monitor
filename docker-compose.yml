@@ -12,6 +12,10 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
     restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-nginx
 
   graph-service:
     build: ./graph-service
@@ -21,6 +25,10 @@ services:
     environment:
       - TZ=Europe/Kyiv
     restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-graph
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -39,6 +47,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-postgres
 
   redis:
     image: redis:7-alpine
@@ -48,6 +60,10 @@ services:
     volumes:
       - redisdata:/data
     restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-redis
 
   # API Service - Handles HTTP traffic (pings, monitor list, history)
   api:
@@ -67,6 +83,10 @@ services:
       - postgres
       - redis
     restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-api
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -91,6 +111,10 @@ services:
       - redis
       - graph-service
     restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-worker
 
 volumes:
   pgdata:

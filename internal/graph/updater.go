@@ -28,7 +28,13 @@ func NewUpdater(db *database.DB, client *Client, bot *tele.Bot) *Updater {
 
 // Start runs the hourly update loop. It fires once immediately, then every hour.
 func (u *Updater) Start(ctx context.Context) {
-	log.Println("[graph] updater started, running initial pass")
+	log.Println("[graph] updater started, waiting 30s for graph-service")
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(30 * time.Second):
+	}
+	log.Println("[graph] running initial pass")
 	u.runAll(ctx)
 
 	ticker := time.NewTicker(1 * time.Hour)

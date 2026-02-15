@@ -39,9 +39,8 @@ map.addLayer(clusterGroup);
 
 const COLORS = {
   online:      '#00ff66',
-  onlineRing:  'rgba(22, 163, 74, 0.25)',
+  onlineText:  '#15803d',
   offline:     '#dc2626',
-  offlineRing: 'rgba(220, 38, 38, 0.25)',
 };
 
 function createMarker(monitor) {
@@ -63,7 +62,7 @@ function createMarker(monitor) {
   const marker = L.marker([monitor.lat, monitor.lng], { icon });
 
   const statusText = monitor.is_online ? 'Світло є' : 'Світла немає';
-  const statusColor = monitor.is_online ? COLORS.online : COLORS.offline;
+  const statusColor = monitor.is_online ? COLORS.onlineText : COLORS.offline;
   const channel = monitor.channel_name
     ? `<div style="margin-top:6px;font-size:0.8em;color:#78716c;">@${escapeHtml(monitor.channel_name)}</div>`
     : '';
@@ -85,6 +84,19 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function formatDuration(since) {
+  const diff = Math.floor((Date.now() - since.getTime()) / 1000);
+  if (diff < 0) return '';
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  const mins = Math.floor((diff % 3600) / 60);
+  const parts = [];
+  if (days > 0) parts.push(days + ' д');
+  if (hours > 0) parts.push(hours + ' год');
+  parts.push(mins + ' хв');
+  return parts.join(' ');
 }
 
 function updateMarker(monitor) {
@@ -257,8 +269,12 @@ function createSvitlobotMarker(point) {
   marker.on('click', function () {
     if (marker.getPopup()) return;
 
-    const color = point.light_status === 1 ? COLORS.online : COLORS.offline;
+    const color = point.light_status === 1 ? COLORS.onlineText : COLORS.offline;
     const statusText = point.light_status === 1 ? 'Світло є' : 'Світла немає';
+    const duration = point.timestamp ? formatDuration(new Date(point.timestamp)) : '';
+    const durationText = duration
+      ? `<div style="font-size:0.83em;color:#78716c;">${duration}</div>`
+      : '';
     const channelLink = point.channel
       ? `<div style="margin-top:6px;font-size:0.8em;"><a href="https://t.me/${escapeHtml(point.channel)}" target="_blank" style="color:#0ea5e9;text-decoration:none;">@${escapeHtml(point.channel)}</a> (${escapeHtml(point.subscribers)})</div>`
       : '';
@@ -270,6 +286,7 @@ function createSvitlobotMarker(point) {
       <div style="font-family:Inter,system-ui,sans-serif;min-width:170px;line-height:1.5;">
         <div style="font-weight:600;font-size:0.95em;">${escapeHtml(point.name)}</div>
         <div style="font-weight:500;color:${color};">${statusText}</div>
+        ${durationText}
         ${groupInfo}
         ${channelLink}
         <div style="margin-top:4px;font-size:0.7em;color:#a8a29e;">svitlobot</div>

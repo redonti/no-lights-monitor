@@ -62,7 +62,6 @@ func main() {
 	api := app.Group("/api")
 	api.Get("/ping/:token", h.PingAPI)
 	api.Get("/monitors", h.GetMonitors)
-	api.Get("/monitors/:id/history", h.GetHistory)
 
 	// Admin routes (protected by HTTP Basic Auth)
 	if cfg.AdminLogin != "" && cfg.AdminPassword != "" {
@@ -70,6 +69,7 @@ func main() {
 		admin.Get("/", h.AdminPage)
 		admin.Get("/api/users", h.AdminGetUsers)
 		admin.Get("/api/monitors", h.AdminGetMonitors)
+		admin.Get("/api/monitors/:id/history", h.GetHistory)
 	}
 
 	// Serve static frontend files

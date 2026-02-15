@@ -22,6 +22,7 @@
   <style>
     body { margin: 0; overflow: hidden; }
     #map { width: 100vw; height: 100vh; }
+    .leaflet-top { top: 52px; }
   </style>
 </head>
 <body class="font-sans">
@@ -40,6 +41,12 @@
     <div class="flex items-center gap-2 my-1 text-stone-600">
       <div class="w-2.5 h-2.5 rounded-full bg-red-600"></div> Світла немає
     </div>
+    <hr class="my-2 border-stone-200" />
+    <h4 class="font-semibold text-sm mb-2">Джерела</h4>
+    <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
+      <input type="checkbox" id="toggle-svitlobot" checked class="accent-sky-500 w-3.5 h-3.5" />
+      <div class="w-2.5 h-2.5 bg-stone-400 rotate-45 shrink-0"></div> <a href="https://svitlobot.in.ua" target="_blank" class="text-sky-500 hover:text-sky-600 no-underline">Svitlobot</a>
+    </label>
   </div>
 
   <div id="stats-badge" class="fixed bottom-6 right-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-600">

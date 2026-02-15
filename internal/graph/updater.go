@@ -114,6 +114,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 	}
 
 	chat := &tele.Chat{ID: channelID}
+	silent := &tele.SendOptions{DisableNotification: true}
 
 	if needsNewMessage {
 		// Send a brand-new photo message.
@@ -121,7 +122,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 			File:    tele.FromReader(pngReader(png)),
 			Caption: fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006")),
 		}
-		sent, err := u.bot.Send(chat, photo)
+		sent, err := u.bot.Send(chat, photo, silent)
 		if err != nil {
 			return fmt.Errorf("send photo: %w", err)
 		}
@@ -148,7 +149,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 				File:    tele.FromReader(pngReader(png)),
 				Caption: fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006")),
 			}
-			sent, sendErr := u.bot.Send(chat, fallbackPhoto)
+			sent, sendErr := u.bot.Send(chat, fallbackPhoto, silent)
 			if sendErr != nil {
 				return fmt.Errorf("send fallback photo: %w", sendErr)
 			}

@@ -34,6 +34,7 @@ const clusterGroup = L.markerClusterGroup({
   spiderfyOnMaxZoom: true,
   showCoverageOnHover: false,
   disableClusteringAtZoom: 14,
+  iconCreateFunction: createClusterIcon,
 });
 map.addLayer(clusterGroup);
 
@@ -42,6 +43,38 @@ const COLORS = {
   onlineText:  '#15803d',
   offline:     '#dc2626',
 };
+
+function createClusterIcon(cluster) {
+  const children = cluster.getAllChildMarkers();
+  const total = children.length;
+  let online = 0;
+  for (const m of children) {
+    if (m.options.isOnline) online++;
+  }
+  const pct = Math.round((online / total) * 100);
+  const size = total < 10 ? 36 : total < 100 ? 42 : 50;
+  const ring = Math.round(size * 0.1);
+  const inner = size - ring * 2;
+
+  return L.divIcon({
+    className: '',
+    iconSize: [size, size],
+    html: `<div style="
+      width:${size}px;height:${size}px;
+      border-radius:50%;
+      background:conic-gradient(${COLORS.online} 0% ${pct}%, ${COLORS.offline} ${pct}% 100%);
+      box-shadow:0 2px 8px rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;
+    "><div style="
+      width:${inner}px;height:${inner}px;
+      border-radius:50%;
+      background:white;
+      display:flex;align-items:center;justify-content:center;
+      font-family:Inter,system-ui,sans-serif;
+      font-size:${size < 42 ? 11 : 13}px;font-weight:700;color:#333;
+    ">${total}</div></div>`,
+  });
+}
 
 function createMarker(monitor) {
   const color = monitor.is_online ? COLORS.online : COLORS.offline;
@@ -59,7 +92,7 @@ function createMarker(monitor) {
       box-shadow:0 4px 12px rgba(0,0,0,0.8);
     "></div>`,
   });
-  const marker = L.marker([monitor.lat, monitor.lng], { icon });
+  const marker = L.marker([monitor.lat, monitor.lng], { icon, isOnline: monitor.is_online });
 
   const statusText = monitor.is_online ? 'Світло є' : 'Світла немає';
   const statusColor = monitor.is_online ? COLORS.onlineText : COLORS.offline;
@@ -157,6 +190,7 @@ const svitlobotClusterGroup = L.markerClusterGroup({
   disableClusteringAtZoom: 14,
   animate: true,
   chunkedLoading: true,
+  iconCreateFunction: createClusterIcon,
 });
 map.addLayer(svitlobotClusterGroup);
 let svitlobotVisible = true;
@@ -263,7 +297,7 @@ const svitlobotIcons = {
 
 function createSvitlobotMarker(point) {
   const icon = svitlobotIcons[point.light_status] || svitlobotIcons[2];
-  const marker = L.marker([point.lat, point.lng], { icon });
+  const marker = L.marker([point.lat, point.lng], { icon, isOnline: point.is_online });
 
   // Lazy popup — only build HTML on first click.
   marker.on('click', function () {

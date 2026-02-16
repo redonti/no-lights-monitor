@@ -2,7 +2,7 @@
 const map = L.map('map', {
   zoomControl: true,
   attributionControl: false,
-}).setView([50.45, 30.52], 6);
+}).setView([48.5, 31.2], 6);
 
 const baseLayers = {
   'Google': L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
@@ -97,7 +97,7 @@ function createMarker(monitor) {
   const statusText = monitor.is_online ? 'Світло є' : 'Світла немає';
   const statusColor = monitor.is_online ? COLORS.onlineText : COLORS.offline;
   const channel = monitor.channel_name
-    ? `<div style="margin-top:6px;font-size:0.8em;color:#78716c;">@${escapeHtml(monitor.channel_name)}</div>`
+    ? `<div style="margin-top:6px;font-size:0.8em;"><a href="https://t.me/${escapeHtml(monitor.channel_name)}" target="_blank" style="color:#0ea5e9;text-decoration:none;">@${escapeHtml(monitor.channel_name)}</a></div>`
     : '';
 
   marker.bindPopup(`
@@ -143,8 +143,6 @@ function updateMarker(monitor) {
 }
 
 // --- Load monitors from API ---
-let initialLoad = true;
-
 async function loadMonitors() {
   try {
     const res = await fetch('/api/monitors');
@@ -160,13 +158,6 @@ async function loadMonitors() {
     });
 
     updateStats(data.length, online, offline);
-
-    // Fit bounds only on first load.
-    if (initialLoad && data.length > 0) {
-      const bounds = L.latLngBounds(data.map(m => [m.lat, m.lng]));
-      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 12 });
-      initialLoad = false;
-    }
   } catch (e) {
     console.error('Failed to load monitors:', e);
   }
@@ -407,8 +398,7 @@ function updateSvitlobotStats(total, online, offline) {
     badge.id = 'svitlobot-stats';
     const statsBadge = document.getElementById('stats-badge');
     if (statsBadge) {
-      badge.style.cssText = statsBadge.style.cssText || '';
-      badge.className = statsBadge.className || '';
+      badge.className = statsBadge.className;
       statsBadge.parentNode.insertBefore(badge, statsBadge.nextSibling);
     }
   }

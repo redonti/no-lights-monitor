@@ -833,7 +833,8 @@ func NewNotifier(b *tele.Bot) *TelegramNotifier {
 func (n *TelegramNotifier) NotifyStatusChange(channelID int64, name string, isOnline bool, duration time.Duration, when time.Time) {
 	var msg string
 	dur := database.FormatDuration(duration)
-	timeStr := when.Format("15:04")
+	kyiv, _ := time.LoadLocation("Europe/Kyiv")
+	timeStr := when.In(kyiv).Format("15:04")
 
 	if isOnline {
 		msg = fmt.Sprintf(msgNotifyOnline, timeStr, dur)

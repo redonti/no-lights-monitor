@@ -31,7 +31,7 @@ setTimeout(() => map.invalidateSize(), 200);
 const markers = {};
 const clusterGroup = L.markerClusterGroup({
   maxClusterRadius: 50,
-  spiderfyOnMaxZoom: true,
+  spiderfyOnMaxZoom: false,
   showCoverageOnHover: false,
   disableClusteringAtZoom: 14,
   iconCreateFunction: createClusterIcon,
@@ -176,15 +176,15 @@ function updateStats(total, online, offline) {
 const SVITLOBOT_API = 'https://api.svitlobot.in.ua/website/getChannelsForMap';
 const svitlobotClusterGroup = L.markerClusterGroup({
   maxClusterRadius: 50,
-  spiderfyOnMaxZoom: true,
+  spiderfyOnMaxZoom: false,
   showCoverageOnHover: false,
   disableClusteringAtZoom: 14,
   animate: true,
   chunkedLoading: true,
   iconCreateFunction: createClusterIcon,
 });
-map.addLayer(svitlobotClusterGroup);
-let svitlobotVisible = true;
+let svitlobotVisible = document.getElementById('toggle-svitlobot').checked;
+if (svitlobotVisible) map.addLayer(svitlobotClusterGroup);
 let svitlobotActiveMarkers = {}; // currently visible markers by id
 
 // --- Spatial grid index ---
@@ -237,7 +237,7 @@ function parseSvitlobotData(raw) {
   for (const line of lines) {
     if (!line.trim()) continue;
     const fields = line.split(';&&&;');
-    if (fields.length < 9) continue;
+    if (fields.length < 10) continue;
 
     const lat = parseFloat(fields[6]);
     const lng = parseFloat(fields[7]);
@@ -290,9 +290,9 @@ function createSvitlobotMarker(point) {
   const icon = svitlobotIcons[point.light_status] || svitlobotIcons[2];
   const marker = L.marker([point.lat, point.lng], { icon, isOnline: point.is_online });
 
-  // Lazy popup — only build HTML on first click.
+  // Lazy popup — build HTML on each click to keep duration fresh.
   marker.on('click', function () {
-    if (marker.getPopup()) return;
+    if (marker.getPopup()) marker.unbindPopup();
 
     const color = point.light_status === 1 ? COLORS.onlineText : COLORS.offline;
     const statusText = point.light_status === 1 ? 'Світло є' : 'Світла немає';
@@ -407,6 +407,7 @@ function updateSvitlobotStats(total, online, offline) {
     <span style="color:#16a34a">${online}</span> зі світлом &middot;
     <span style="color:#dc2626">${offline}</span> без світла
   `;
+  if (!svitlobotVisible) badge.style.display = 'none';
 }
 
 // --- Svitlobot toggle ---

@@ -18,6 +18,7 @@ services:
         tag: nolights-nginx
 
   graph-service:
+    image: ghcr.io/redonti/no-lights-monitor/graph-service:latest
     build: ./graph-service
     container_name: light-graph-service
     ports:
@@ -67,6 +68,7 @@ services:
 
   # API Service - Handles HTTP traffic (pings, monitor list, history)
   api:
+    image: ghcr.io/redonti/no-lights-monitor/api:latest
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -93,6 +95,7 @@ services:
 
   # Worker Service - Telegram bot + background jobs (heartbeat checker, graph updater)
   worker:
+    image: ghcr.io/redonti/no-lights-monitor/worker:latest
     build:
       context: .
       dockerfile: Dockerfile.worker

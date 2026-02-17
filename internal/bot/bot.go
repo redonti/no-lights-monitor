@@ -128,14 +128,17 @@ func (b *Bot) registerHandlers() {
 // ── Commands ─────────────────────────────────────────────────────────
 
 func (b *Bot) handleStart(c tele.Context) error {
+	log.Printf("[bot] /start from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	return c.Send(msgStart, htmlOpts)
 }
 
 func (b *Bot) handleHelp(c tele.Context) error {
+	log.Printf("[bot] /help from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	return c.Send(msgHelp, htmlOpts)
 }
 
 func (b *Bot) handleCancel(c tele.Context) error {
+	log.Printf("[bot] /cancel from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	b.mu.Lock()
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
@@ -143,6 +146,7 @@ func (b *Bot) handleCancel(c tele.Context) error {
 }
 
 func (b *Bot) handleStatus(c tele.Context) error {
+	log.Printf("[bot] /status from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
@@ -187,6 +191,7 @@ func (b *Bot) handleStatus(c tele.Context) error {
 }
 
 func (b *Bot) handleStop(c tele.Context) error {
+	log.Printf("[bot] /stop from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
@@ -225,6 +230,7 @@ func (b *Bot) handleStop(c tele.Context) error {
 }
 
 func (b *Bot) handleResume(c tele.Context) error {
+	log.Printf("[bot] /resume from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
@@ -263,6 +269,7 @@ func (b *Bot) handleResume(c tele.Context) error {
 }
 
 func (b *Bot) handleCallback(c tele.Context) error {
+	log.Printf("[bot] callback %q from user %d (@%s)", c.Callback().Data, c.Sender().ID, c.Sender().Username)
 	data := c.Callback().Data
 	parts := strings.Split(data, ":")
 	if len(parts) != 2 {
@@ -400,6 +407,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 }
 
 func (b *Bot) handleInfo(c tele.Context) error {
+	log.Printf("[bot] /info from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
@@ -438,6 +446,7 @@ func (b *Bot) handleInfo(c tele.Context) error {
 }
 
 func (b *Bot) handleTest(c tele.Context) error {
+	log.Printf("[bot] /test from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
@@ -476,6 +485,7 @@ func (b *Bot) handleTest(c tele.Context) error {
 }
 
 func (b *Bot) handleDelete(c tele.Context) error {
+	log.Printf("[bot] /delete from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
 	if err != nil {
@@ -508,6 +518,7 @@ func (b *Bot) handleDelete(c tele.Context) error {
 // ── /create flow ─────────────────────────────────────────────────────
 
 func (b *Bot) handleCreate(c tele.Context) error {
+	log.Printf("[bot] /create from user %d (@%s)", c.Sender().ID, c.Sender().Username)
 	ctx := context.Background()
 	_, err := b.db.UpsertUser(ctx, c.Sender().ID, c.Sender().Username, c.Sender().FirstName)
 	if err != nil {
@@ -760,6 +771,7 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 	}
 
 	b.heartbeatSvc.RegisterMonitor(monitor)
+	log.Printf("[bot] monitor created: id=%d type=%s name=%q user=%d (@%s)", monitor.ID, monitorType, monitor.Name, c.Sender().ID, c.Sender().Username)
 
 	// Trigger initial weekly graph in the channel.
 	if b.graphUpdater != nil && monitor.ChannelID != 0 {

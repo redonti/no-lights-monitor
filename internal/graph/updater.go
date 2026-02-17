@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"time"
 
 	tele "gopkg.in/telebot.v3"
@@ -149,6 +150,11 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 		}
 		_, err := u.bot.EditMedia(editMsg, editPhoto)
 		if err != nil {
+			// "message is not modified" means the image is identical — not a real error.
+			if strings.Contains(err.Error(), "message is not modified") {
+				log.Printf("[graph] monitor %d: graph unchanged (msg %d)", monitorID, oldMsgID)
+				return nil
+			}
 			// If edit fails (message deleted, etc.), send a new one with a fresh reader.
 			log.Printf("[graph] monitor %d: edit failed (%v), sending new message", monitorID, err)
 			fallbackPhoto := &tele.Photo{

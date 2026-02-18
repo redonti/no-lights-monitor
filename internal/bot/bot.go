@@ -27,6 +27,7 @@ const (
 	stateAwaitingType
 	stateAwaitingPingTarget
 	stateAwaitingAddress
+	stateAwaitingManualAddress
 	stateAwaitingChannel
 )
 
@@ -376,7 +377,34 @@ func (b *Bot) handleCallback(c tele.Context) error {
 			bld.WriteString(msgInfoHeartbeatHint)
 		}
 
-		return c.Send(bld.String(), htmlOpts)
+		mapBtn := tele.InlineButton{
+			Text: "🗺 Прибрати з карти",
+			Data: fmt.Sprintf("map_hide:%d", monitorID),
+		}
+		if !targetMonitor.IsPublic {
+			mapBtn = tele.InlineButton{
+				Text: "🗺 Додати на карту",
+				Data: fmt.Sprintf("map_show:%d", monitorID),
+			}
+		}
+		keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{{mapBtn}}}
+		return c.Send(bld.String(), htmlOpts, keyboard)
+
+	case "map_hide":
+		if err := b.db.SetMonitorPublic(ctx, monitorID, false); err != nil {
+			log.Printf("[bot] set monitor public error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: msgMapHideError})
+		}
+		_ = c.Respond(&tele.CallbackResponse{Text: msgMapHidden})
+		return c.Send(msgMapHidden)
+
+	case "map_show":
+		if err := b.db.SetMonitorPublic(ctx, monitorID, true); err != nil {
+			log.Printf("[bot] set monitor public error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: msgMapHideError})
+		}
+		_ = c.Respond(&tele.CallbackResponse{Text: msgMapShown})
+		return c.Send(msgMapShown)
 
 	case "test":
 		if targetMonitor.ChannelID == 0 {
@@ -558,6 +586,8 @@ func (b *Bot) handleText(c tele.Context) error {
 		return b.onPingTarget(c, conv)
 	case stateAwaitingAddress:
 		return b.onAddress(c, conv)
+	case stateAwaitingManualAddress:
+		return b.onManualAddress(c, conv)
 	case stateAwaitingChannel:
 		return b.onChannel(c, conv)
 	}
@@ -646,15 +676,12 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 		lat, err1 := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
 		lng, err2 := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
 		if err1 == nil && err2 == nil && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 {
-			// Looks like raw coordinates — use directly.
 			b.mu.Lock()
-			conv.Name = text
-			conv.Address = text
 			conv.Latitude = lat
 			conv.Longitude = lng
-			conv.State = stateAwaitingChannel
+			conv.State = stateAwaitingManualAddress
 			b.mu.Unlock()
-			return c.Send(b.channelStepMessage(conv), htmlOpts)
+			return c.Send(msgManualAddressStep, htmlOpts)
 		}
 	}
 
@@ -701,11 +728,25 @@ func (b *Bot) handleLocation(c tele.Context) error {
 	loc := c.Message().Location
 
 	b.mu.Lock()
-	if conv.Name == "" {
-		conv.Name = fmt.Sprintf("%.4f, %.4f", loc.Lat, loc.Lng)
-	}
 	conv.Latitude = float64(loc.Lat)
 	conv.Longitude = float64(loc.Lng)
+	conv.State = stateAwaitingManualAddress
+	b.mu.Unlock()
+
+	return c.Send(msgManualAddressStep, htmlOpts)
+}
+
+// ── Step: Manual address (after raw coordinates / GPS) ───────────────
+
+func (b *Bot) onManualAddress(c tele.Context, conv *conversationData) error {
+	text := strings.TrimSpace(c.Text())
+	if len(text) < 3 {
+		return c.Send(msgManualAddressTooShort, htmlOpts)
+	}
+
+	b.mu.Lock()
+	conv.Name = text
+	conv.Address = text
 	conv.State = stateAwaitingChannel
 	b.mu.Unlock()
 

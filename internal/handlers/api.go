@@ -120,7 +120,7 @@ func (h *Handlers) GetMonitors(c *fiber.Ctx) error {
 	}
 
 	ctx := context.Background()
-	monitors, err := h.DB.GetAllMonitors(ctx)
+	monitors, err := h.DB.GetPublicMonitors(ctx)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load monitors"})
 	}

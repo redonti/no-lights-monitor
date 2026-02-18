@@ -23,7 +23,8 @@ type Monitor struct {
 	MonitorType        string     `json:"monitor_type"`  // "heartbeat" or "ping"
 	PingTarget         string     `json:"ping_target"`   // IP/hostname for ping monitors
 	IsOnline           bool       `json:"is_online"`
-	IsActive           bool       `json:"is_active"` // whether monitoring is enabled
+	IsActive           bool       `json:"is_active"`  // whether monitoring is enabled
+	IsPublic           bool       `json:"is_public"`  // whether shown on public map
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty"`
 	LastStatusChangeAt time.Time  `json:"last_status_change_at"`
 	GraphMessageID     int        `json:"graph_message_id"`

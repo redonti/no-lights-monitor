@@ -173,7 +173,7 @@ func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]
 	rows, err := db.Pool.Query(ctx, `
 		SELECT m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
 		       m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
-		       m.is_online, m.is_active, m.last_heartbeat_at,
+		       m.is_online, m.is_active, m.is_public, m.last_heartbeat_at,
 		       m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.created_at
 		FROM monitors m
 		JOIN users u ON u.id = m.user_id

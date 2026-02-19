@@ -4,23 +4,10 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import io
-
-plt.rcParams['font.family'] = 'DejaVu Sans'
-plt.rcParams['font.size'] = 12
+from draw_chart_svg import draw_chart
 
 KYIV_TZ      = ZoneInfo('Europe/Kyiv')
 DAY_NAMES_UA = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'НД']
-
-COLOR_GREEN      = '#90EE90'
-COLOR_RED        = '#FF6B6B'
-COLOR_UNKNOWN    = '#E8E8E8'   # gray — no data / new monitor
-COLOR_FUTURE     = '#E8E8E8'   # gray — future hours
-COLOR_GRID_LIGHT = '#F0F0F0'
-COLOR_GRID_HEAVY = '#DDDDDD'
 
 app = FastAPI(
     title="Light Status Graph Service",
@@ -62,20 +49,6 @@ class WeekFromEventsRequest(BaseModel):
             }
         }
 
-
-# ── Models: legacy pre-processed endpoint ─────────────────────────────────────
-
-class DaySegment(BaseModel):
-    start_hour: float = Field(..., ge=0, le=24)
-    end_hour:   float = Field(..., ge=0, le=24)
-    is_online:  bool
-
-class DayData(BaseModel):
-    date: str;  day_name: str;  segments: List[DaySegment]
-    hours_online: float;  hours_offline: float
-
-class WeekGraphRequest(BaseModel):
-    monitor_id: int;  week_start: str;  week_end: str;  days: List[DayData]
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -140,62 +113,6 @@ def build_day_segments(
 
     return segments, status
 
-
-# ── Drawing ────────────────────────────────────────────────────────────────────
-
-def draw_chart(days: list) -> bytes:
-    n = len(days)
-    fig, axes = plt.subplots(n, 1, figsize=(16, n * 1.2), sharex=False, sharey=False)
-    if n == 1:
-        axes = [axes]
-    fig.patch.set_facecolor('white')
-
-    color_map = {
-        'green':   COLOR_GREEN,
-        'red':     COLOR_RED,
-        'unknown': COLOR_UNKNOWN,
-        'future':  COLOR_FUTURE,
-    }
-
-    for ax, day in zip(axes, days):
-        ax.set_facecolor('white')
-
-        for seg in day['segments']:
-            ax.barh(0, seg['end'] - seg['start'], left=seg['start'],
-                    height=0.6, color=color_map[seg['kind']], edgecolor='none')
-
-        ax.text(-1.2, 0, day['date_label'],
-                va='center', ha='right', fontsize=14, color='#999999')
-
-        if not day['is_future']:
-            ax.text(25.5,  0.2, format_hours(day['hours_online']),
-                    va='center', ha='left', fontsize=11, color='#4CAF50', fontweight='bold')
-            ax.text(25.5, -0.2, format_hours(day['hours_offline']),
-                    va='center', ha='left', fontsize=11, color='#FF5252', fontweight='bold')
-        else:
-            ax.text(25.5, 0, '—', va='center', ha='left', fontsize=11, color='#BBBBBB')
-
-        ax.set_xlim(-1.5, 27)
-        ax.set_ylim(-0.5, 0.5)
-        ax.set_xticks([0, 3, 6, 9, 12, 15, 18, 21, 24])
-        ax.set_xticklabels(['0','3','6','9','12','15','18','21','24'], fontsize=12, color='#AAAAAA')
-        ax.set_yticks([])
-
-        for h in range(25):
-            ax.axvline(x=h, color=COLOR_GRID_LIGHT, linewidth=0.8, zorder=0)
-        for h in [0, 3, 6, 9, 12, 15, 18, 21, 24]:
-            ax.axvline(x=h, color=COLOR_GRID_HEAVY, linewidth=1.2, zorder=0)
-
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-        ax.tick_params(axis='x', length=0)
-
-    plt.tight_layout(h_pad=0.5)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', facecolor='white')
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
 
 
 # ── Core logic: /generate-week-graph ─────────────────────────────────────────
@@ -264,19 +181,6 @@ def build_week_from_events(req: WeekFromEventsRequest) -> bytes:
     return draw_chart(days_draw)
 
 
-# ── Core logic: /generate-graph (legacy) ──────────────────────────────────────
-
-def build_legacy(request: WeekGraphRequest) -> bytes:
-    days = [{
-        'date_label':    f"{d.day_name} ({d.date})",
-        'segments':      [{'start': s.start_hour, 'end': s.end_hour,
-                           'kind': 'green' if s.is_online else 'red'} for s in d.segments],
-        'hours_online':  d.hours_online,
-        'hours_offline': d.hours_offline,
-        'is_future':     False,
-    } for d in request.days]
-    return draw_chart(days)
-
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
@@ -307,12 +211,36 @@ async def generate_week_graph(request: WeekFromEventsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/generate-graph", response_class=Response,
-          responses={200: {"content": {"image/png": {}}}},
-          summary="Generate graph from pre-processed segments (legacy)")
-async def generate_graph(request: WeekGraphRequest):
+
+@app.get("/test-graph", response_class=Response,
+         responses={200: {"content": {"image/png": {}}}},
+         summary="Returns a sample graph with realistic fixture data")
+async def test_graph():
+    now_kyiv   = datetime.now(KYIV_TZ)
+    week_start = now_kyiv - timedelta(days=now_kyiv.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    req = WeekFromEventsRequest(
+        monitor_id=0,
+        week_start=week_start.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        events=[
+            RawEvent(id=0,  monitor_id=0, is_online=True,  timestamp=(week_start - timedelta(hours=4)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=1,  monitor_id=0, is_online=False, timestamp=(week_start + timedelta(hours=7,  minutes=30)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=2,  monitor_id=0, is_online=True,  timestamp=(week_start + timedelta(hours=11, minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=3,  monitor_id=0, is_online=False, timestamp=(week_start + timedelta(hours=15, minutes=45)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=4,  monitor_id=0, is_online=True,  timestamp=(week_start + timedelta(hours=18, minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=5,  monitor_id=0, is_online=False, timestamp=(week_start + timedelta(days=1, hours=6,  minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=6,  monitor_id=0, is_online=True,  timestamp=(week_start + timedelta(days=1, hours=10, minutes=30)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=7,  monitor_id=0, is_online=False, timestamp=(week_start + timedelta(days=2, hours=8,  minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=8,  monitor_id=0, is_online=True,  timestamp=(week_start + timedelta(days=2, hours=12, minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=9,  monitor_id=0, is_online=False, timestamp=(week_start + timedelta(days=2, hours=20, minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=10, monitor_id=0, is_online=True,  timestamp=(week_start + timedelta(days=2, hours=22, minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=11, monitor_id=0, is_online=False, timestamp=(week_start + timedelta(days=3, hours=9,  minutes=0 )).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+            RawEvent(id=12, monitor_id=0, is_online=True,  timestamp=(week_start + timedelta(days=3, hours=13, minutes=15)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')),
+        ]
+    )
     try:
-        return Response(content=build_legacy(request), media_type="image/png")
+        return Response(content=build_week_from_events(req), media_type="image/png")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -323,8 +251,7 @@ async def root():
         "service": "Light Status Graph Generator",
         "version": "2.0.0",
         "endpoints": {
-            "POST /generate-week-graph": "raw events -> full Mon-Sun graph (recommended)",
-            "POST /generate-graph":      "pre-processed segments (legacy)",
+            "POST /generate-week-graph": "raw events -> full Mon-Sun graph",
             "GET  /health":              "health check",
             "GET  /docs":                "Swagger UI",
         },

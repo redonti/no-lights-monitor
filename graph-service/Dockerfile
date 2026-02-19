@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# Встановлюємо необхідні системні пакети для matplotlib
 RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
+    libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Створюємо робочу директорію
@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копіюємо код сервісу
-COPY main.py .
+COPY main.py draw_chart_svg.py ./
 
 # Відкриваємо порт
 EXPOSE 8000

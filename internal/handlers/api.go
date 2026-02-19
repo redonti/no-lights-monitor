@@ -11,14 +11,12 @@ import (
 
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/database"
-	"no-lights-monitor/internal/heartbeat"
 	"no-lights-monitor/internal/models"
 )
 
 type Handlers struct {
-	DB           *database.DB
-	Cache        *cache.Cache          // For API service (stateless ping)
-	HeartbeatSvc *heartbeat.Service    // For Worker service (stateful ping)
+	DB    *database.DB
+	Cache *cache.Cache // For API service (stateless ping)
 
 	// In-memory response cache for /api/monitors.
 	monitorCache   []byte
@@ -36,21 +34,6 @@ const (
 	// MaxHistoryRange is the maximum allowed time range for history queries.
 	MaxHistoryRange = 30 * 24 * time.Hour
 )
-
-// Ping handles GET /api/ping/:token -- for Worker service (stateful with in-memory state).
-func (h *Handlers) Ping(c *fiber.Ctx) error {
-	token := c.Params("token")
-	if token == "" {
-		return c.SendStatus(fiber.StatusBadRequest)
-	}
-
-	ctx := context.Background()
-	if ok := h.HeartbeatSvc.HandlePing(ctx, token); !ok {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "unknown token"})
-	}
-
-	return c.JSON(fiber.Map{"status": "ok"})
-}
 
 // PingAPI handles GET /api/ping/:token -- for API service (stateless, DB + Redis only).
 // This version validates the token against the database and writes to Redis.

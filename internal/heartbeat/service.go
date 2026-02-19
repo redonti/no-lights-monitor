@@ -127,66 +127,6 @@ func (s *Service) RemoveMonitor(token string) {
 	s.monitors.Delete(token)
 }
 
-// HandlePing processes a heartbeat ping for the given token.
-// Returns true if the token was valid.
-func (s *Service) HandlePing(ctx context.Context, token string) bool {
-	val, ok := s.monitors.Load(token)
-	if !ok {
-		return false
-	}
-	info := val.(*monitorInfo)
-	now := time.Now()
-
-	// Update heartbeat in Redis.
-	if err := s.cache.SetHeartbeat(ctx, info.ID, now); err != nil {
-		log.Printf("[heartbeat] redis set error for monitor %d: %v", info.ID, err)
-	}
-
-	// Check and update online status under lock.
-	info.mu.Lock()
-	wasOffline := !info.IsOnline
-	var offlineDuration time.Duration
-	if wasOffline {
-		offlineDuration = now.Sub(info.LastChange)
-		info.IsOnline = true
-		info.LastChange = now
-	}
-	// Capture values needed for async operations while still under lock.
-	monitorID := info.ID
-	monitorName := info.Name
-	channelID := info.ChannelID
-	info.mu.Unlock()
-
-	// Perform expensive operations outside the lock.
-	if wasOffline {
-		// Persist to DB.
-		go func() {
-			if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, true); err != nil {
-				log.Printf("[heartbeat] failed to update status for monitor %d: %v", monitorID, err)
-			}
-			if err := s.db.UpdateMonitorHeartbeat(context.Background(), monitorID, now); err != nil {
-				log.Printf("[heartbeat] failed to update heartbeat for monitor %d: %v", monitorID, err)
-			}
-		}()
-
-		// Notify Telegram channel.
-		if s.notifier != nil && channelID != 0 {
-			go s.notifier.NotifyStatusChange(channelID, monitorName, true, offlineDuration, now)
-		}
-
-		log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(offlineDuration))
-	} else {
-		// Just update heartbeat timestamp in DB.
-		go func() {
-			if err := s.db.UpdateMonitorHeartbeat(context.Background(), monitorID, now); err != nil {
-				log.Printf("[heartbeat] failed to update heartbeat for monitor %d: %v", monitorID, err)
-			}
-		}()
-	}
-
-	return true
-}
-
 // StartChecker runs a background loop that marks monitors as offline
 // when their heartbeats go stale.
 func (s *Service) StartChecker(ctx context.Context, intervalSec int) {

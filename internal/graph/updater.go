@@ -12,6 +12,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/models"
 )
 
 // Updater is a background service that creates / updates weekly graph
@@ -107,11 +108,20 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 	// Determine if we need a new message (new week or first graph).
 	needsNewMessage := oldMsgID == 0 || oldWeekStart == nil || !oldWeekStart.Equal(weekStart)
 
-	// Fetch events: from the day before week_start (for initial status) to now.
-	eventsFrom := weekStart.AddDate(0, 0, -1)
-	events, err := u.db.GetStatusHistory(ctx, monitorID, eventsFrom, now)
+	// Fetch week events.
+	events, err := u.db.GetStatusHistory(ctx, monitorID, weekStart, now)
 	if err != nil {
 		return fmt.Errorf("fetch events: %w", err)
+	}
+
+	// Prepend the last known event before week_start so the graph knows the
+	// initial state for Monday regardless of when that event occurred.
+	anchor, err := u.db.GetLastEventBefore(ctx, monitorID, weekStart)
+	if err != nil {
+		return fmt.Errorf("fetch anchor event: %w", err)
+	}
+	if anchor != nil {
+		events = append([]*models.StatusEvent{anchor}, events...)
 	}
 
 	// Call graph service.

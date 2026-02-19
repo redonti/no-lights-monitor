@@ -265,6 +265,26 @@ func (db *DB) UpdateMonitorStatus(ctx context.Context, id int64, isOnline bool) 
 	return err
 }
 
+// GetLastEventBefore returns the most recent status event strictly before the given time.
+// Returns nil, nil if no such event exists.
+func (db *DB) GetLastEventBefore(ctx context.Context, monitorID int64, before time.Time) (*models.StatusEvent, error) {
+	var e models.StatusEvent
+	err := db.Pool.QueryRow(ctx, `
+		SELECT id, monitor_id, is_online, timestamp
+		FROM status_events
+		WHERE monitor_id = $1 AND timestamp < $2
+		ORDER BY timestamp DESC
+		LIMIT 1
+	`, monitorID, before).Scan(&e.ID, &e.MonitorID, &e.IsOnline, &e.Timestamp)
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &e, nil
+}
+
 // GetStatusHistory returns status events for a monitor within a time range.
 func (db *DB) GetStatusHistory(ctx context.Context, monitorID int64, from, to time.Time) ([]*models.StatusEvent, error) {
 	rows, err := db.Pool.Query(ctx, `

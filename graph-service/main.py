@@ -5,6 +5,11 @@ from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from draw_chart_svg import draw_chart
+import logging
+
+logging.getLogger("uvicorn.access").addFilter(
+    type("", (logging.Filter,), {"filter": staticmethod(lambda r: "/health" not in r.getMessage())})()
+)
 
 KYIV_TZ      = ZoneInfo('Europe/Kyiv')
 DAY_NAMES_UA = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'НД']

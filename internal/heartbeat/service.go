@@ -258,7 +258,11 @@ func (s *Service) checkAll(ctx context.Context) {
 			}()
 
 			if s.notifier != nil && channelID != 0 {
-				go s.notifier.NotifyStatusChange(channelID, monitorName, isNowOnline, duration, now)
+				when := now
+				if (!isNowOnline){
+					when = now.Add(-s.threshold)
+				}
+				go s.notifier.NotifyStatusChange(channelID, monitorName, isNowOnline, duration, when)
 			}
 
 			if isNowOnline {

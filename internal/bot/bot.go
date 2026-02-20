@@ -84,6 +84,20 @@ func New(token string, db *database.DB, hbSvc *heartbeat.Service, baseURL string
 	}
 
 	bot.registerHandlers()
+
+	if err := b.SetCommands([]tele.Command{
+		{Text: "create", Description: "Налаштувати новий монітор"},
+		{Text: "info", Description: "Детальна інформація та URL для пінгу"},
+		{Text: "edit", Description: "Змінити назву або адресу монітора"},
+		{Text: "test", Description: "Відправити тестове повідомлення"},
+		{Text: "stop", Description: "Призупинити моніторинг"},
+		{Text: "resume", Description: "Відновити моніторинг"},
+		{Text: "delete", Description: "Видалити монітор"},
+		{Text: "help", Description: "Довідка про команди"},
+	}); err != nil {
+		log.Printf("[bot] failed to set commands: %v", err)
+	}
+
 	return bot, nil
 }
 
@@ -111,7 +125,6 @@ func (b *Bot) TeleBot() *tele.Bot {
 func (b *Bot) registerHandlers() {
 	b.bot.Handle("/start", b.handleStart)
 	b.bot.Handle("/create", b.handleCreate)
-	b.bot.Handle("/status", b.handleStatus)
 	b.bot.Handle("/info", b.handleInfo)
 	b.bot.Handle("/stop", b.handleStop)
 	b.bot.Handle("/resume", b.handleResume)
@@ -149,51 +162,6 @@ func (b *Bot) handleCancel(c tele.Context) error {
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
 	return c.Send(msgCancelled)
-}
-
-func (b *Bot) handleStatus(c tele.Context) error {
-	log.Printf("[bot] /status from user %d (@%s)", c.Sender().ID, c.Sender().Username)
-	ctx := context.Background()
-	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
-	if err != nil {
-		log.Printf("[bot] get monitors by telegram_id error: %v", err)
-		return c.Send(msgError)
-	}
-
-	if len(monitors) == 0 {
-		return c.Send(msgNoMonitors)
-	}
-
-	now := time.Now()
-	var bld strings.Builder
-	bld.WriteString(msgStatusHeader)
-
-	for i, m := range monitors {
-		dur := now.Sub(m.LastStatusChangeAt)
-		durStr := database.FormatDuration(dur)
-		status := msgStatusOffline
-		if m.IsOnline {
-			status = msgStatusOnline
-		}
-		if !m.IsActive {
-			status = msgStatusPaused
-		}
-		bld.WriteString(fmt.Sprintf("<b>%d.</b> %s\n", i+1, html.EscapeString(m.Name)))
-		bld.WriteString(fmt.Sprintf("   %s\n", html.EscapeString(m.Address)))
-		if m.IsActive {
-			bld.WriteString(fmt.Sprintf("   %s — %s\n", status, durStr))
-		} else {
-			bld.WriteString(fmt.Sprintf("   %s\n", status))
-		}
-		if m.ChannelName != "" {
-			bld.WriteString(fmt.Sprintf("   Канал: @%s\n", html.EscapeString(m.ChannelName)))
-		}
-		bld.WriteString("\n")
-	}
-
-	bld.WriteString(msgStatusFooter)
-
-	return c.Send(bld.String(), htmlOpts)
 }
 
 func (b *Bot) handleStop(c tele.Context) error {
@@ -323,7 +291,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		}
 		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, false)
 		_ = c.Respond(&tele.CallbackResponse{Text: msgStopOK})
-		return c.Send(fmt.Sprintf("%s <b>%s</b> призупинено.\n\nВідновити можна через /resume", msgStopOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgStopDone, msgStopOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "resume":
 		if err := b.db.SetMonitorActive(ctx, monitorID, true); err != nil {
@@ -332,7 +300,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		}
 		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, true)
 		_ = c.Respond(&tele.CallbackResponse{Text: msgResumeOK})
-		return c.Send(fmt.Sprintf("%s <b>%s</b> відновлено.\n\nПризупинити можна через /stop", msgResumeOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgResumeDone, msgResumeOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "delete_confirm":
 		if err := b.db.DeleteMonitor(ctx, monitorID); err != nil {
@@ -341,16 +309,16 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		}
 		b.heartbeatSvc.RemoveMonitor(targetMonitor.Token)
 		_ = c.Respond(&tele.CallbackResponse{Text: msgDeleteOK})
-		return c.Send(fmt.Sprintf("%s <b>%s</b> успішно видалено.", msgDeleteOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgDeleteDone, msgDeleteOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "info":
 		_ = c.Respond(&tele.CallbackResponse{})
 
 		var bld strings.Builder
-		bld.WriteString("<b>📊 Інформація про монітор</b>\n\n")
-		bld.WriteString(fmt.Sprintf("🏷 <b>Назва:</b> %s\n", html.EscapeString(targetMonitor.Name)))
-		bld.WriteString(fmt.Sprintf("📍 <b>Адреса:</b> %s\n", html.EscapeString(targetMonitor.Address)))
-		bld.WriteString(fmt.Sprintf("🌐 <b>Координати:</b> %.6f, %.6f\n\n", targetMonitor.Latitude, targetMonitor.Longitude))
+		bld.WriteString(msgInfoDetailHeader)
+		bld.WriteString(fmt.Sprintf(msgInfoDetailName, html.EscapeString(targetMonitor.Name)))
+		bld.WriteString(fmt.Sprintf(msgInfoDetailAddress, html.EscapeString(targetMonitor.Address)))
+		bld.WriteString(fmt.Sprintf(msgInfoDetailCoords, targetMonitor.Latitude, targetMonitor.Longitude))
 
 		status := msgInfoStatusOffline
 		if targetMonitor.IsOnline {
@@ -359,36 +327,36 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		if !targetMonitor.IsActive {
 			status = msgStatusPaused
 		}
-		bld.WriteString(fmt.Sprintf("<b>Статус:</b> %s\n", status))
+		bld.WriteString(fmt.Sprintf(msgInfoDetailStatus, status))
 
 		if targetMonitor.LastHeartbeatAt != nil {
-			bld.WriteString(fmt.Sprintf("<b>Останній пінг:</b> %s\n", targetMonitor.LastHeartbeatAt.Format("2006-01-02 15:04:05")))
+			bld.WriteString(fmt.Sprintf(msgInfoDetailLastPing, targetMonitor.LastHeartbeatAt.Format("2006-01-02 15:04:05")))
 		}
 
 		if targetMonitor.ChannelID != 0 {
-			bld.WriteString(fmt.Sprintf("<b>Канал:</b> @%s\n\n", html.EscapeString(targetMonitor.ChannelName)))
+			bld.WriteString(fmt.Sprintf(msgInfoDetailChannel, html.EscapeString(targetMonitor.ChannelName)))
 		} else {
 			bld.WriteString("\n")
 		}
 
 		if targetMonitor.MonitorType == "ping" {
-			bld.WriteString(fmt.Sprintf("<b>🌐 Тип:</b> %s\n", msgInfoTypePing))
-			bld.WriteString(fmt.Sprintf("<b>🎯 Ціль:</b> <code>%s</code>\n\n", html.EscapeString(targetMonitor.PingTarget)))
+			bld.WriteString(fmt.Sprintf(msgInfoDetailTypePing, msgInfoTypePing))
+			bld.WriteString(fmt.Sprintf(msgInfoDetailTarget, html.EscapeString(targetMonitor.PingTarget)))
 			bld.WriteString(msgInfoPingHint)
 		} else {
-			bld.WriteString(fmt.Sprintf("<b>📡 Тип:</b> %s\n", msgInfoTypeHeartbeat))
-			bld.WriteString("<b>🔗 URL для пінгу:</b>\n")
-			bld.WriteString(fmt.Sprintf("<code>%s/api/ping/%s</code>\n\n", b.baseURL, targetMonitor.Token))
+			bld.WriteString(fmt.Sprintf(msgInfoDetailTypeHB, msgInfoTypeHeartbeat))
+			bld.WriteString(msgInfoDetailURLLabel)
+			bld.WriteString(fmt.Sprintf(msgInfoDetailURL, b.baseURL, targetMonitor.Token))
 			bld.WriteString(msgInfoHeartbeatHint)
 		}
 
 		mapBtn := tele.InlineButton{
-			Text: "🗺 Прибрати з карти",
+			Text: msgMapBtnHide,
 			Data: fmt.Sprintf("map_hide:%d", monitorID),
 		}
 		if !targetMonitor.IsPublic {
 			mapBtn = tele.InlineButton{
-				Text: "🗺 Додати на карту",
+				Text: msgMapBtnShow,
 				Data: fmt.Sprintf("map_show:%d", monitorID),
 			}
 		}
@@ -398,8 +366,8 @@ func (b *Bot) handleCallback(c tele.Context) error {
 	case "edit":
 		_ = c.Respond(&tele.CallbackResponse{})
 		keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{
-			{{Text: "✏️ Змінити назву", Data: fmt.Sprintf("edit_name:%d", monitorID)}},
-			{{Text: "📍 Змінити адресу", Data: fmt.Sprintf("edit_address:%d", monitorID)}},
+			{{Text: msgEditBtnName, Data: fmt.Sprintf("edit_name:%d", monitorID)}},
+			{{Text: msgEditBtnAddress, Data: fmt.Sprintf("edit_address:%d", monitorID)}},
 		}}
 		return c.Send(fmt.Sprintf(msgEditChoose, html.EscapeString(targetMonitor.Name)), htmlOpts, keyboard)
 
@@ -444,11 +412,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 			return c.Respond(&tele.CallbackResponse{Text: msgTestNoChannel})
 		}
 
-		testMsg := fmt.Sprintf(
-			"🧪 <b>Тестове повідомлення</b>\n\n"+
-				"Монітор: <b>%s</b>\n"+
-				"Адреса: %s\n\n"+
-				"Якщо ви бачите це повідомлення, то налаштування каналу працює коректно! ✅",
+		testMsg := fmt.Sprintf(msgTestNotification,
 			html.EscapeString(targetMonitor.Name),
 			html.EscapeString(targetMonitor.Address),
 		)
@@ -460,7 +424,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		}
 
 		_ = c.Respond(&tele.CallbackResponse{Text: msgTestOK})
-		return c.Send(fmt.Sprintf("%s відправлено в канал <b>@%s</b>", msgTestOK, html.EscapeString(targetMonitor.ChannelName)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgTestSentTo, msgTestOK, html.EscapeString(targetMonitor.ChannelName)), htmlOpts)
 
 	default:
 		return c.Respond(&tele.CallbackResponse{Text: msgUnknownAction})
@@ -493,7 +457,7 @@ func (b *Bot) handleInfo(c tele.Context) error {
 			status = msgStatusPaused
 		}
 
-		bld.WriteString(fmt.Sprintf("<b>%d.</b> %s - %s\n", i+1, html.EscapeString(m.Name), status))
+		bld.WriteString(fmt.Sprintf(msgInfoRow, i+1, html.EscapeString(m.Name), status))
 		rows = append(rows, []tele.InlineButton{
 			{
 				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
@@ -532,7 +496,7 @@ func (b *Bot) handleTest(c tele.Context) error {
 
 	rows := make([][]tele.InlineButton, 0, len(withChannels))
 	for i, m := range withChannels {
-		bld.WriteString(fmt.Sprintf("%d. %s (@%s)\n", i+1, html.EscapeString(m.Name), html.EscapeString(m.ChannelName)))
+		bld.WriteString(fmt.Sprintf(msgTestRow, i+1, html.EscapeString(m.Name), html.EscapeString(m.ChannelName)))
 		rows = append(rows, []tele.InlineButton{
 			{
 				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
@@ -708,7 +672,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 	// Validate: resolve the hostname to check it's reachable.
 	ips, err := net.LookupHost(target)
 	if err != nil {
-		return c.Send(fmt.Sprintf("Не вдалося знайти хост <code>%s</code>. Перевірте адресу і спробуйте ще раз.", html.EscapeString(target)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgPingHostNotFound, html.EscapeString(target)), htmlOpts)
 	}
 
 	// Check for private IPs.
@@ -718,9 +682,9 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 	}
 
 	// Test ICMP ping to verify the host is reachable.
-	_ = c.Send(fmt.Sprintf("🔍 Перевіряю доступність <code>%s</code>...", html.EscapeString(target)), htmlOpts)
+	_ = c.Send(fmt.Sprintf(msgPingChecking, html.EscapeString(target)), htmlOpts)
 	if !b.heartbeatSvc.PingHost(target) {
-		return c.Send(fmt.Sprintf("❌ Хост <code>%s</code> не відповідає на ICMP ping.\nПереконайтесь, що роутер дозволяє ICMP і спробуйте ще раз.", html.EscapeString(target)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgPingHostUnreachable, html.EscapeString(target)), htmlOpts)
 	}
 
 	b.mu.Lock()
@@ -728,7 +692,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 	conv.State = stateAwaitingAddress
 	b.mu.Unlock()
 
-	_ = c.Send(fmt.Sprintf("✅ Хост доступний: <code>%s</code> → <code>%s</code>", html.EscapeString(target), ips[0]), htmlOpts)
+	_ = c.Send(fmt.Sprintf(msgPingHostOK, html.EscapeString(target), ips[0]), htmlOpts)
 
 	return c.Send(msgAddressStepPing, htmlOpts)
 }
@@ -776,7 +740,7 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 	conv.State = stateAwaitingChannel
 	b.mu.Unlock()
 
-	_ = c.Send(fmt.Sprintf("Знайдено: <b>%s</b>", html.EscapeString(result.DisplayName)), htmlOpts)
+	_ = c.Send(fmt.Sprintf(msgAddressFound, html.EscapeString(result.DisplayName)), htmlOpts)
 	return c.Send(b.channelStepMessage(conv), htmlOpts)
 }
 
@@ -943,11 +907,7 @@ func (b *Bot) channelStepMessage(conv *conversationData) string {
 	if conv.MonitorType == "ping" {
 		step = "4/4"
 	}
-	return fmt.Sprintf(`Геопозицію встановлено: <code>%.5f, %.5f</code>
-
-<b>Крок %s:</b> Створіть Telegram-канал і додайте мене як адміністратора з правом "Публікація повідомлень".
-
-Потім надішліть мені @username каналу (напр., @my_power_channel).`, conv.Latitude, conv.Longitude, step)
+	return fmt.Sprintf(msgChannelStep, conv.Latitude, conv.Longitude, step)
 }
 
 func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
@@ -959,7 +919,7 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 
 	chat, err := b.bot.ChatByUsername(text)
 	if err != nil {
-		return c.Send(fmt.Sprintf("Не вдалося знайти канал <b>%s</b>. Переконайтеся, що канал існує і має публічний username. Спробуйте ще раз.", html.EscapeString(text)), htmlOpts)
+		return c.Send(fmt.Sprintf(msgChannelNotFound, html.EscapeString(text)), htmlOpts)
 	}
 
 	me := b.bot.Me
@@ -1012,17 +972,7 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 
 	var msg string
 	if monitorType == "ping" {
-		msg = fmt.Sprintf(`<b>Монітор налаштовано!</b>
-
-<b>Назва:</b> %s
-<b>Тип:</b> Server Ping
-<b>Ціль:</b> <code>%s</code>
-<b>Координати:</b> %.5f, %.5f
-<b>Канал:</b> @%s
-
-Сервер пінгуватиме <code>%s</code> кожні 5 хвилин.
-
-Коли пінги не проходять — я сповіщу канал, що світла немає. Коли відновляться — що світло повернулося.`,
+		msg = fmt.Sprintf(msgCreateDonePing,
 			html.EscapeString(monitor.Name),
 			html.EscapeString(monitor.PingTarget),
 			conv.Latitude, conv.Longitude,
@@ -1031,21 +981,7 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 		)
 	} else {
 		pingURL := fmt.Sprintf("%s/api/ping/%s", b.baseURL, monitor.Token)
-		msg = fmt.Sprintf(`<b>Монітор налаштовано!</b>
-
-<b>Назва:</b> %s
-<b>Тип:</b> ESP Heartbeat
-<b>Координати:</b> %.5f, %.5f
-<b>Канал:</b> @%s
-
-<b>Посилання для пінгу:</b>
-<code>%s</code>
-
-Налаштуйте ваш пристрій надсилати GET-запит на це посилання кожні 5 хвилин.
-
-Коли пінги зупиняться — я сповіщу канал, що світла немає. Коли відновляться — що світло повернулося.
-
-💬 Інструкції з налаштування та допомога: @lights_monitor_chat`,
+		msg = fmt.Sprintf(msgCreateDoneHeartbeat,
 			html.EscapeString(monitor.Name),
 			conv.Latitude, conv.Longitude,
 			html.EscapeString(chat.Username),

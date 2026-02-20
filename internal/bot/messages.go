@@ -9,7 +9,6 @@ const msgStart = `<b>Вітаю в No-Lights Monitor!</b>
 Я допоможу моніторити стан електроенергії у вашому домі та сповіщати Telegram-канал, коли світло зникає або повертається.
 
 /create - Налаштувати новий монітор
-/status - Перевірити стан моніторів
 /info - Детальна інформація та URL для пінгу
 /edit - Змінити назву або адресу монітора
 /test - Відправити тестове повідомлення
@@ -31,7 +30,6 @@ const msgHelp = `<b>Як це працює:</b>
 7. Коли пінги відновлюються — сповіщаю, що світло є
 
 <b>Команди:</b>
-/status — переглянути всі монітори
 /info — детальна інформація та URL для пінгу
 /edit — змінити назву або адресу монітора
 /test — відправити тестове повідомлення в канал
@@ -58,12 +56,8 @@ const (
 // ── /status ─────────────────────────────────────────────────────────
 
 const (
-	msgNoMonitors       = "У вас ще немає моніторів.\n\nСтворіть перший через /create"
-	msgStatusHeader     = "<b>Ваші монітори</b>\n\n"
-	msgStatusFooter     = "/create — додати новий монітор"
-	msgStatusOnline     = "🟢 Світло є"
-	msgStatusOffline    = "🔴 Світла немає"
-	msgStatusPaused     = "⏸ Призупинено"
+	msgNoMonitors        = "У вас ще немає моніторів.\n\nСтворіть перший через /create"
+	msgStatusPaused      = "⏸ Призупинено"
 	msgInfoStatusOnline  = "🟢 Онлайн"
 	msgInfoStatusOffline = "🔴 Офлайн"
 )
@@ -181,7 +175,7 @@ const (
 	msgInfoTypePing      = "Server Ping"
 	msgInfoTypeHeartbeat = "ESP Heartbeat"
 	msgInfoPingHint      = "<i>Сервер автоматично пінгує цю адресу кожні 5 хвилин.</i>"
-	msgInfoHeartbeatHint = "<i>Налаштуйте ваш пристрій відправляти GET-запити на цей URL кожні 5 хвилин.</i>"
+	msgInfoHeartbeatHint = "<i>Налаштуйте ваш пристрій відправляти GET-запити на цей URL кожні 5 хвилин.</i> \n💬 Інструкції з налаштування та допомога: @lights_monitor_chat"
 )
 
 // ── Map visibility ───────────────────────────────────────────────────
@@ -204,6 +198,109 @@ const (
 	msgEditNameDone     = "✅ Назву оновлено: <b>%s</b>"
 	msgEditAddressDone  = "✅ Адресу оновлено: <b>%s</b>"
 )
+
+// ── /info list row ───────────────────────────────────────────────────
+
+const msgInfoRow = "<b>%d.</b> %s - %s\n"
+
+// ── /test list row ───────────────────────────────────────────────────
+
+const msgTestRow = "%d. %s (@%s)\n"
+
+// ── Callbacks: stop / resume / delete ────────────────────────────────
+
+const (
+	msgStopDone   = "%s <b>%s</b> призупинено.\n\nВідновити можна через /resume"
+	msgResumeDone = "%s <b>%s</b> відновлено.\n\nПризупинити можна через /stop"
+	msgDeleteDone = "%s <b>%s</b> успішно видалено."
+)
+
+// ── Callback: info detail ─────────────────────────────────────────────
+
+const (
+	msgInfoDetailHeader   = "<b>📊 Інформація про монітор</b>\n\n"
+	msgInfoDetailName     = "🏷 <b>Назва:</b> %s\n"
+	msgInfoDetailAddress  = "📍 <b>Адреса:</b> %s\n"
+	msgInfoDetailCoords   = "🌐 <b>Координати:</b> %.6f, %.6f\n\n"
+	msgInfoDetailStatus   = "<b>Статус:</b> %s\n"
+	msgInfoDetailLastPing = "<b>Останній пінг:</b> %s\n"
+	msgInfoDetailChannel  = "<b>Канал:</b> @%s\n\n"
+	msgInfoDetailTypePing = "<b>🌐 Тип:</b> %s\n"
+	msgInfoDetailTarget   = "<b>🎯 Ціль:</b> <code>%s</code>\n\n"
+	msgInfoDetailTypeHB   = "<b>📡 Тип:</b> %s\n"
+	msgInfoDetailURLLabel = "<b>🔗 URL для пінгу:</b>\n"
+	msgInfoDetailURL      = "<code>%s/api/ping/%s</code>\n\n"
+)
+
+// ── Buttons ───────────────────────────────────────────────────────────
+
+const (
+	msgEditBtnName    = "✏️ Змінити назву"
+	msgEditBtnAddress = "📍 Змінити адресу"
+	msgMapBtnHide     = "🗺 Прибрати з карти"
+	msgMapBtnShow     = "🗺 Додати на карту"
+)
+
+// ── /test notification ────────────────────────────────────────────────
+
+const (
+	msgTestNotification = "🧪 <b>Тестове повідомлення</b>\n\nМонітор: <b>%s</b>\nАдреса: %s\n\nЯкщо ви бачите це повідомлення, то налаштування каналу працює коректно! ✅"
+	msgTestSentTo       = "%s відправлено в канал <b>@%s</b>"
+)
+
+// ── Ping target validation ────────────────────────────────────────────
+
+const (
+	msgPingHostNotFound    = "Не вдалося знайти хост <code>%s</code>. Перевірте адресу і спробуйте ще раз."
+	msgPingChecking        = "🔍 Перевіряю доступність <code>%s</code>..."
+	msgPingHostUnreachable = "❌ Хост <code>%s</code> не відповідає на ICMP ping.\nПереконайтесь, що роутер дозволяє ICMP і спробуйте ще раз."
+	msgPingHostOK          = "✅ Хост доступний: <code>%s</code> → <code>%s</code>"
+)
+
+// ── Address / geocode ─────────────────────────────────────────────────
+
+const msgAddressFound = "Знайдено: <b>%s</b>"
+
+// ── Channel step ──────────────────────────────────────────────────────
+
+const (
+	msgChannelNotFound = "Не вдалося знайти канал <b>%s</b>. Переконайтеся, що канал існує і має публічний username. Спробуйте ще раз."
+	msgChannelStep     = `Геопозицію встановлено: <code>%.5f, %.5f</code>
+
+<b>Крок %s:</b> Створіть Telegram-канал і додайте мене як адміністратора з правом "Публікація повідомлень".
+
+Потім надішліть мені @username каналу (напр., @my_power_channel).`
+)
+
+// ── Create success ────────────────────────────────────────────────────
+
+const msgCreateDonePing = `<b>Монітор налаштовано!</b>
+
+<b>Назва:</b> %s
+<b>Тип:</b> Server Ping
+<b>Ціль:</b> <code>%s</code>
+<b>Координати:</b> %.5f, %.5f
+<b>Канал:</b> @%s
+
+Сервер пінгуватиме <code>%s</code> кожні 5 хвилин.
+
+Коли пінги не проходять — я сповіщу канал, що світла немає. Коли відновляться — що світло повернулося.`
+
+const msgCreateDoneHeartbeat = `<b>Монітор налаштовано!</b>
+
+<b>Назва:</b> %s
+<b>Тип:</b> ESP Heartbeat
+<b>Координати:</b> %.5f, %.5f
+<b>Канал:</b> @%s
+
+<b>Посилання для пінгу:</b>
+<code>%s</code>
+
+Налаштуйте ваш пристрій надсилати GET-запит на це посилання кожні 5 хвилин.
+
+Коли пінги зупиняться — я сповіщу канал, що світла немає. Коли відновляться — що світло повернулося.
+
+💬 Інструкції з налаштування та допомога: @lights_monitor_chat`
 
 // ── Notifications ───────────────────────────────────────────────────
 

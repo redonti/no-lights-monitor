@@ -158,6 +158,12 @@ async function loadMonitors() {
     });
 
     updateStats(data.length, online, offline);
+
+    const el = document.getElementById('last-updated');
+    if (el) {
+      const t = new Date();
+      el.textContent = 'Оновлено: ' + t.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
   } catch (e) {
     console.error('Failed to load monitors:', e);
   }

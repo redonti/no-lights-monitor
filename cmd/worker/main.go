@@ -69,7 +69,7 @@ func main() {
 	}
 
 	// Wire up the notifier now that the bot exists.
-	notifier := bot.NewNotifier(tgBot.TeleBot())
+	notifier := bot.NewNotifier(tgBot.TeleBot(), db)
 	hbService.SetNotifier(notifier)
 
 	go tgBot.Start()

@@ -308,3 +308,9 @@ const (
 	msgNotifyOnline  = "🟢 <b>%s Світло з'явилося</b> \n<i>(не було %s)</i>"
 	msgNotifyOffline = "🔴 <b>%s Світла немає</b>\n<i>(воно було %s)</i>"
 )
+
+// ── Channel access errors ────────────────────────────────────────────
+
+// msgChannelError is sent to the monitor owner when the bot loses channel access.
+// %s = monitor name
+const msgChannelError = "⚠️ <b>Монітор призупинено</b>\n\nМонітор <b>%s</b> було призупинено, оскільки бот втратив доступ до каналу (канал видалено, бота видалено або відкликано права).\n\nПереконайтеся, що бот є адміністратором каналу з правом \"Публікація повідомлень\", та відновіть моніторинг через /resume."

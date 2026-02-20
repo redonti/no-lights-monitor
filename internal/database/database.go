@@ -393,6 +393,17 @@ func (db *DB) DeleteMonitor(ctx context.Context, id int64) error {
 	return err
 }
 
+// GetOwnerTelegramIDByMonitorID returns the Telegram ID of the monitor's owner.
+func (db *DB) GetOwnerTelegramIDByMonitorID(ctx context.Context, monitorID int64) (int64, error) {
+	var telegramID int64
+	err := db.Pool.QueryRow(ctx, `
+		SELECT u.telegram_id FROM users u
+		JOIN monitors m ON m.user_id = u.id
+		WHERE m.id = $1
+	`, monitorID).Scan(&telegramID)
+	return telegramID, err
+}
+
 // FormatDuration returns a human-readable Ukrainian duration string.
 func FormatDuration(d time.Duration) string {
 	if d < 0 {

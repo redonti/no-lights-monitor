@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"log"
@@ -992,19 +993,58 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 	return c.Send(msg, htmlOpts)
 }
 
+// ── Channel error helpers ─────────────────────────────────────────────
+
+// isChannelError reports whether a Telegram API error means the bot lost access to a channel.
+func isChannelError(err error) bool {
+	return errors.Is(err, tele.ErrChatNotFound) ||
+		errors.Is(err, tele.ErrKickedFromGroup) ||
+		errors.Is(err, tele.ErrKickedFromSuperGroup) ||
+		errors.Is(err, tele.ErrKickedFromChannel) ||
+		errors.Is(err, tele.ErrNotChannelMember) ||
+		errors.Is(err, tele.ErrNoRightsToSend) ||
+		errors.Is(err, tele.ErrNoRightsToSendPhoto)
+}
+
+// SendToUser sends an HTML message directly to a Telegram user by their Telegram ID.
+func SendToUser(b *tele.Bot, userTelegramID int64, msg string) {
+	chat := &tele.Chat{ID: userTelegramID}
+	if _, err := b.Send(chat, msg, htmlOpts); err != nil {
+		log.Printf("[bot] failed to send DM to user %d: %v", userTelegramID, err)
+	}
+}
+
+// NotifyChannelError checks whether err is a channel access error and, if so,
+// pauses the monitor in the DB and notifies the owner.
+// Returns true if the error was a channel error and was handled.
+func NotifyChannelError(ctx context.Context, b *tele.Bot, db *database.DB, err error, userTelegramID int64, monitor *models.Monitor) bool {
+	if !isChannelError(err) {
+		return false
+	}
+	log.Printf("[bot] channel access lost for monitor %d (%s), pausing", monitor.ID, monitor.Name)
+	if dbErr := db.SetMonitorActive(ctx, monitor.ID, false); dbErr != nil {
+		log.Printf("[bot] failed to pause monitor %d: %v", monitor.ID, dbErr)
+	}
+	msg := fmt.Sprintf(msgChannelError, html.EscapeString(monitor.Name))
+	SendToUser(b, userTelegramID, msg)
+	return true
+}
+
 // ── Notifier ─────────────────────────────────────────────────────────
 
 // TelegramNotifier implements heartbeat.Notifier using the Telegram bot.
 type TelegramNotifier struct {
 	bot *tele.Bot
+	db  *database.DB
 }
 
-func NewNotifier(b *tele.Bot) *TelegramNotifier {
-	return &TelegramNotifier{bot: b}
+func NewNotifier(b *tele.Bot, db *database.DB) *TelegramNotifier {
+	return &TelegramNotifier{bot: b, db: db}
 }
 
 // NotifyStatusChange sends a status message to the linked Telegram channel.
-func (n *TelegramNotifier) NotifyStatusChange(channelID int64, name string, isOnline bool, duration time.Duration, when time.Time) {
+// On channel access errors the monitor is paused and the owner is notified via DM.
+func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name string, isOnline bool, duration time.Duration, when time.Time) {
 	var msg string
 	dur := database.FormatDuration(duration)
 	kyiv, _ := time.LoadLocation("Europe/Kyiv")
@@ -1019,6 +1059,15 @@ func (n *TelegramNotifier) NotifyStatusChange(channelID int64, name string, isOn
 	chat := &tele.Chat{ID: channelID}
 	_, err := n.bot.Send(chat, msg, htmlOpts)
 	if err != nil {
-		log.Printf("[bot] failed to send notification to channel %d: %v", channelID, err)
+		ctx := context.Background()
+		ownerID, dbErr := n.db.GetOwnerTelegramIDByMonitorID(ctx, monitorID)
+		if dbErr != nil {
+			log.Printf("[bot] failed to get owner for monitor %d: %v", monitorID, dbErr)
+			return
+		}
+		monitor := &models.Monitor{ID: monitorID, Name: name}
+		if !NotifyChannelError(ctx, n.bot, n.db, err, ownerID, monitor) {
+			log.Printf("[bot] failed to send notification to channel %d: %v", channelID, err)
+		}
 	}
 }

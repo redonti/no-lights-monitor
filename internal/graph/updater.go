@@ -11,6 +11,7 @@ import (
 
 	tele "gopkg.in/telebot.v3"
 
+	"no-lights-monitor/internal/bot"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/models"
 )
@@ -77,11 +78,11 @@ func (u *Updater) UpdateSingle(ctx context.Context, monitorID, channelID int64) 
 	}
 	for _, m := range monitors {
 		if m.ID == monitorID {
-			return u.updateOne(ctx, m.ID, m.ChannelID, m.GraphMessageID, m.GraphWeekStart, weekStart, now)
+			return u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.GraphMessageID, m.GraphWeekStart, weekStart, now)
 		}
 	}
 	// Monitor just created, no graph yet.
-	return u.updateOne(ctx, monitorID, channelID, 0, nil, weekStart, now)
+	return u.updateOne(ctx, monitorID, channelID, "", 0, nil, weekStart, now)
 }
 
 // runAll iterates over every monitor with a channel and updates its graph.
@@ -97,14 +98,26 @@ func (u *Updater) runAll(ctx context.Context) {
 	weekStart := currentWeekStart(now)
 
 	for _, m := range monitors {
-		if err := u.updateOne(ctx, m.ID, m.ChannelID, m.GraphMessageID, m.GraphWeekStart, weekStart, now); err != nil {
+		if err := u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.GraphMessageID, m.GraphWeekStart, weekStart, now); err != nil {
 			log.Printf("[graph] monitor %d: %v", m.ID, err)
 		}
 	}
 }
 
+// handleChannelError queries the monitor owner and delegates to bot.NotifyChannelError.
+// Returns true if the error was a channel access error and was handled.
+func (u *Updater) handleChannelError(ctx context.Context, monitorID int64, monitorName string, err error) bool {
+	ownerID, dbErr := u.db.GetOwnerTelegramIDByMonitorID(ctx, monitorID)
+	if dbErr != nil {
+		log.Printf("[graph] failed to get owner for monitor %d: %v", monitorID, dbErr)
+		return false
+	}
+	monitor := &models.Monitor{ID: monitorID, Name: monitorName}
+	return bot.NotifyChannelError(ctx, u.bot, u.db, err, ownerID, monitor)
+}
+
 // updateOne generates a graph PNG and sends or edits it in the channel.
-func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, oldMsgID int, oldWeekStart *time.Time, weekStart, now time.Time) error {
+func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, monitorName string, oldMsgID int, oldWeekStart *time.Time, weekStart, now time.Time) error {
 	// Determine if we need a new message (new week or first graph).
 	needsNewMessage := oldMsgID == 0 || oldWeekStart == nil || !oldWeekStart.Equal(weekStart)
 
@@ -141,6 +154,9 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 		}
 		sent, err := u.bot.Send(chat, photo, silent)
 		if err != nil {
+			if u.handleChannelError(ctx, monitorID, monitorName, err) {
+				return nil
+			}
 			return fmt.Errorf("send photo: %w", err)
 		}
 		// Store the message ID so we can edit it later.
@@ -165,7 +181,11 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 				log.Printf("[graph] monitor %d: graph unchanged (msg %d)", monitorID, oldMsgID)
 				return nil
 			}
-			// If edit fails (message deleted, etc.), send a new one with a fresh reader.
+			// Channel is gone — pause and notify owner, skip fallback send.
+			if u.handleChannelError(ctx, monitorID, monitorName, err) {
+				return nil
+			}
+			// If edit fails for another reason (message deleted, etc.), send a new one.
 			log.Printf("[graph] monitor %d: edit failed (%v), sending new message", monitorID, err)
 			fallbackPhoto := &tele.Photo{
 				File:    tele.FromReader(pngReader(png)),
@@ -173,6 +193,9 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, old
 			}
 			sent, sendErr := u.bot.Send(chat, fallbackPhoto, silent)
 			if sendErr != nil {
+				if u.handleChannelError(ctx, monitorID, monitorName, sendErr) {
+					return nil
+				}
 				return fmt.Errorf("send fallback photo: %w", sendErr)
 			}
 			if err := u.db.UpdateGraphMessage(ctx, monitorID, sent.ID, weekStart); err != nil {

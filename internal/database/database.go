@@ -368,6 +368,22 @@ func (db *DB) SetMonitorPublic(ctx context.Context, id int64, isPublic bool) err
 	return err
 }
 
+// UpdateMonitorName updates the display name of a monitor.
+func (db *DB) UpdateMonitorName(ctx context.Context, id int64, name string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET name = $2 WHERE id = $1
+	`, id, name)
+	return err
+}
+
+// UpdateMonitorAddress updates the address and coordinates of a monitor.
+func (db *DB) UpdateMonitorAddress(ctx context.Context, id int64, address string, lat, lng float64) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET address = $2, latitude = $3, longitude = $4 WHERE id = $1
+	`, id, address, lat, lng)
+	return err
+}
+
 // DeleteMonitor removes a monitor from the database.
 // CASCADE will automatically delete associated status_events.
 func (db *DB) DeleteMonitor(ctx context.Context, id int64) error {

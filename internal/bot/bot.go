@@ -29,16 +29,20 @@ const (
 	stateAwaitingAddress
 	stateAwaitingManualAddress
 	stateAwaitingChannel
+	stateAwaitingEditName
+	stateAwaitingEditAddress
+	stateAwaitingEditManualAddress
 )
 
 type conversationData struct {
-	State       conversationState
-	MonitorType string // "heartbeat" or "ping"
-	PingTarget  string // IP/hostname for ping monitors
-	Name        string
-	Address     string
-	Latitude    float64
-	Longitude   float64
+	State         conversationState
+	MonitorType   string // "heartbeat" or "ping"
+	PingTarget    string // IP/hostname for ping monitors
+	Name          string
+	Address       string
+	Latitude      float64
+	Longitude     float64
+	EditMonitorID int64 // ID of monitor being edited
 }
 
 // GraphUpdater is used to trigger a graph update for a newly created monitor.
@@ -113,6 +117,7 @@ func (b *Bot) registerHandlers() {
 	b.bot.Handle("/resume", b.handleResume)
 	b.bot.Handle("/test", b.handleTest)
 	b.bot.Handle("/delete", b.handleDelete)
+	b.bot.Handle("/edit", b.handleEdit)
 	b.bot.Handle("/help", b.handleHelp)
 	b.bot.Handle("/cancel", b.handleCancel)
 
@@ -390,6 +395,34 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{{mapBtn}}}
 		return c.Send(bld.String(), htmlOpts, keyboard)
 
+	case "edit":
+		_ = c.Respond(&tele.CallbackResponse{})
+		keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{
+			{{Text: "✏️ Змінити назву", Data: fmt.Sprintf("edit_name:%d", monitorID)}},
+			{{Text: "📍 Змінити адресу", Data: fmt.Sprintf("edit_address:%d", monitorID)}},
+		}}
+		return c.Send(fmt.Sprintf(msgEditChoose, html.EscapeString(targetMonitor.Name)), htmlOpts, keyboard)
+
+	case "edit_name":
+		_ = c.Respond(&tele.CallbackResponse{})
+		b.mu.Lock()
+		b.conversations[c.Sender().ID] = &conversationData{
+			State:         stateAwaitingEditName,
+			EditMonitorID: monitorID,
+		}
+		b.mu.Unlock()
+		return c.Send(fmt.Sprintf(msgEditNamePrompt, html.EscapeString(targetMonitor.Name)), htmlOpts)
+
+	case "edit_address":
+		_ = c.Respond(&tele.CallbackResponse{})
+		b.mu.Lock()
+		b.conversations[c.Sender().ID] = &conversationData{
+			State:         stateAwaitingEditAddress,
+			EditMonitorID: monitorID,
+		}
+		b.mu.Unlock()
+		return c.Send(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(targetMonitor.Address)), htmlOpts)
+
 	case "map_hide":
 		if err := b.db.SetMonitorPublic(ctx, monitorID, false); err != nil {
 			log.Printf("[bot] set monitor public error: %v", err)
@@ -543,6 +576,37 @@ func (b *Bot) handleDelete(c tele.Context) error {
 	return c.Send(bld.String(), tele.ModeHTML, keyboard)
 }
 
+func (b *Bot) handleEdit(c tele.Context) error {
+	log.Printf("[bot] /edit from user %d (@%s)", c.Sender().ID, c.Sender().Username)
+	ctx := context.Background()
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send(msgError)
+	}
+
+	if len(monitors) == 0 {
+		return c.Send(msgNoMonitors)
+	}
+
+	var bld strings.Builder
+	bld.WriteString(msgEditHeader)
+
+	rows := make([][]tele.InlineButton, 0, len(monitors))
+	for i, m := range monitors {
+		bld.WriteString(fmt.Sprintf("%d. %s\n", i+1, html.EscapeString(m.Name)))
+		rows = append(rows, []tele.InlineButton{
+			{
+				Text: fmt.Sprintf("%d. %s", i+1, m.Name),
+				Data: fmt.Sprintf("edit:%d", m.ID),
+			},
+		})
+	}
+
+	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
+	return c.Send(bld.String(), tele.ModeHTML, keyboard)
+}
+
 // ── /create flow ─────────────────────────────────────────────────────
 
 func (b *Bot) handleCreate(c tele.Context) error {
@@ -590,6 +654,12 @@ func (b *Bot) handleText(c tele.Context) error {
 		return b.onManualAddress(c, conv)
 	case stateAwaitingChannel:
 		return b.onChannel(c, conv)
+	case stateAwaitingEditName:
+		return b.onEditName(c, conv)
+	case stateAwaitingEditAddress:
+		return b.onEditAddress(c, conv)
+	case stateAwaitingEditManualAddress:
+		return b.onEditManualAddress(c, conv)
 	}
 	return nil
 }
@@ -721,19 +791,132 @@ func (b *Bot) handleLocation(c tele.Context) error {
 		return nil
 	}
 
-	if conv.State != stateAwaitingAddress {
-		return nil
-	}
-
 	loc := c.Message().Location
 
+	if conv.State == stateAwaitingAddress {
+		b.mu.Lock()
+		conv.Latitude = float64(loc.Lat)
+		conv.Longitude = float64(loc.Lng)
+		conv.State = stateAwaitingManualAddress
+		b.mu.Unlock()
+		return c.Send(msgManualAddressStep, htmlOpts)
+	}
+
+	if conv.State == stateAwaitingEditAddress {
+		b.mu.Lock()
+		conv.Latitude = float64(loc.Lat)
+		conv.Longitude = float64(loc.Lng)
+		conv.State = stateAwaitingEditManualAddress
+		b.mu.Unlock()
+		return c.Send(msgManualAddressStep, htmlOpts)
+	}
+
+	return nil
+}
+
+// ── Edit handlers ────────────────────────────────────────────────────
+
+func (b *Bot) onEditName(c tele.Context, conv *conversationData) error {
+	name := strings.TrimSpace(c.Text())
+	if len(name) < 2 {
+		return c.Send(msgEditNameTooShort, htmlOpts)
+	}
+
+	ctx := context.Background()
+
+	// Verify the monitor still belongs to this user.
+	monitors, err := b.db.GetMonitorsByTelegramID(ctx, c.Sender().ID)
+	if err != nil {
+		log.Printf("[bot] get monitors error: %v", err)
+		return c.Send(msgError)
+	}
+	var target *models.Monitor
+	for _, m := range monitors {
+		if m.ID == conv.EditMonitorID {
+			target = m
+			break
+		}
+	}
+	if target == nil {
+		b.mu.Lock()
+		delete(b.conversations, c.Sender().ID)
+		b.mu.Unlock()
+		return c.Send(msgMonitorNotFound)
+	}
+
+	if err := b.db.UpdateMonitorName(ctx, conv.EditMonitorID, name); err != nil {
+		log.Printf("[bot] update monitor name error: %v", err)
+		return c.Send(msgErrorRetry)
+	}
+
 	b.mu.Lock()
-	conv.Latitude = float64(loc.Lat)
-	conv.Longitude = float64(loc.Lng)
-	conv.State = stateAwaitingManualAddress
+	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
 
-	return c.Send(msgManualAddressStep, htmlOpts)
+	return c.Send(fmt.Sprintf(msgEditNameDone, html.EscapeString(name)), htmlOpts)
+}
+
+func (b *Bot) onEditAddress(c tele.Context, conv *conversationData) error {
+	text := strings.TrimSpace(c.Text())
+	if len(text) < 3 {
+		return c.Send(msgAddressTooShort, htmlOpts)
+	}
+
+	// Raw coordinates.
+	if parts := strings.Split(text, ","); len(parts) == 2 {
+		lat, err1 := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+		lng, err2 := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+		if err1 == nil && err2 == nil && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 {
+			b.mu.Lock()
+			conv.Latitude = lat
+			conv.Longitude = lng
+			conv.State = stateAwaitingEditManualAddress
+			b.mu.Unlock()
+			return c.Send(msgManualAddressStep, htmlOpts)
+		}
+	}
+
+	_ = c.Send(msgSearchingAddress)
+
+	result, err := geocode.Search(context.Background(), text)
+	if err != nil {
+		log.Printf("[bot] geocode error: %v", err)
+		return c.Send(msgGeocodeError)
+	}
+	if result == nil {
+		return c.Send(msgAddressNotFound, htmlOpts)
+	}
+
+	ctx := context.Background()
+	if err := b.db.UpdateMonitorAddress(ctx, conv.EditMonitorID, result.DisplayName, result.Latitude, result.Longitude); err != nil {
+		log.Printf("[bot] update monitor address error: %v", err)
+		return c.Send(msgErrorRetry)
+	}
+
+	b.mu.Lock()
+	delete(b.conversations, c.Sender().ID)
+	b.mu.Unlock()
+
+	return c.Send(fmt.Sprintf(msgEditAddressDone, html.EscapeString(result.DisplayName)), htmlOpts)
+}
+
+func (b *Bot) onEditManualAddress(c tele.Context, conv *conversationData) error {
+	text := strings.TrimSpace(c.Text())
+	if len(text) < 3 {
+		return c.Send(msgManualAddressTooShort, htmlOpts)
+	}
+
+	ctx := context.Background()
+	if err := b.db.UpdateMonitorAddress(ctx, conv.EditMonitorID, text, conv.Latitude, conv.Longitude); err != nil {
+		log.Printf("[bot] update monitor address error: %v", err)
+		return c.Send(msgErrorRetry)
+	}
+
+	b.mu.Lock()
+	delete(b.conversations, c.Sender().ID)
+	b.mu.Unlock()
+
+	return c.Send(fmt.Sprintf(msgEditAddressDone, html.EscapeString(text)), htmlOpts)
 }
 
 // ── Step: Manual address (after raw coordinates / GPS) ───────────────

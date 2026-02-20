@@ -231,7 +231,7 @@ func (s *Service) checkAll(ctx context.Context) {
 			// Skip during grace period to prevent false offline notifications after system restart.
 			duration = now.Sub(info.LastChange)
 			info.IsOnline = false
-			info.LastChange = now
+			info.LastChange = now.Add(-s.threshold)
 			statusChanged = true
 			isNowOnline = false
 		} else if !info.IsOnline && isFresh {

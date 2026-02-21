@@ -291,6 +291,11 @@ func (b *Bot) handleCallback(c tele.Context) error {
 			return c.Respond(&tele.CallbackResponse{Text: msgStopError})
 		}
 		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, false)
+		if targetMonitor.ChannelID != 0 {
+			if _, err := b.bot.Send(&tele.Chat{ID: targetMonitor.ChannelID}, msgChannelPaused, htmlOpts); err != nil {
+				log.Printf("[bot] failed to send pause notice to channel %d: %v", targetMonitor.ChannelID, err)
+			}
+		}
 		_ = c.Respond(&tele.CallbackResponse{Text: msgStopOK})
 		return c.Send(fmt.Sprintf(msgStopDone, msgStopOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
@@ -300,6 +305,11 @@ func (b *Bot) handleCallback(c tele.Context) error {
 			return c.Respond(&tele.CallbackResponse{Text: msgResumeError})
 		}
 		b.heartbeatSvc.SetMonitorActive(targetMonitor.Token, true)
+		if targetMonitor.ChannelID != 0 {
+			if _, err := b.bot.Send(&tele.Chat{ID: targetMonitor.ChannelID}, msgChannelResumed, htmlOpts); err != nil {
+				log.Printf("[bot] failed to send resume notice to channel %d: %v", targetMonitor.ChannelID, err)
+			}
+		}
 		_ = c.Respond(&tele.CallbackResponse{Text: msgResumeOK})
 		return c.Send(fmt.Sprintf(msgResumeDone, msgResumeOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
@@ -1022,6 +1032,13 @@ func NotifyChannelError(ctx context.Context, b *tele.Bot, db *database.DB, err e
 		return false
 	}
 	log.Printf("[bot] channel access lost for monitor %d (%s), pausing", monitor.ID, monitor.Name)
+	// Attempt to notify the channel — may succeed for partial-access errors (e.g. no photo rights).
+	if monitor.ChannelID != 0 {
+		chat := &tele.Chat{ID: monitor.ChannelID}
+		if _, sendErr := b.Send(chat, msgChannelPausedBySystem, htmlOpts); sendErr != nil {
+			log.Printf("[bot] could not send system-pause notice to channel %d: %v", monitor.ChannelID, sendErr)
+		}
+	}
 	if dbErr := db.SetMonitorActive(ctx, monitor.ID, false); dbErr != nil {
 		log.Printf("[bot] failed to pause monitor %d: %v", monitor.ID, dbErr)
 	}

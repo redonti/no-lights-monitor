@@ -203,7 +203,7 @@ func (db *DB) GetPublicMonitors(ctx context.Context) ([]*models.Monitor, error) 
 		       channel_id, channel_name, monitor_type, ping_target,
 		       is_online, is_active, is_public, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
-		FROM monitors WHERE is_public = TRUE ORDER BY id
+		FROM monitors WHERE is_public = TRUE AND is_active = TRUE ORDER BY id
 	`)
 	if err != nil {
 		return nil, err

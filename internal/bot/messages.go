@@ -314,3 +314,12 @@ const (
 // msgChannelError is sent to the monitor owner when the bot loses channel access.
 // %s = monitor name
 const msgChannelError = "⚠️ <b>Монітор призупинено</b>\n\nМонітор <b>%s</b> було призупинено, оскільки бот втратив доступ до каналу (канал видалено, бота видалено або відкликано права).\n\nПереконайтеся, що бот є адміністратором каналу з правом \"Публікація повідомлень\", та відновіть моніторинг через /resume."
+
+// msgChannelPaused is posted to the channel when the owner manually pauses monitoring.
+const msgChannelPaused = "⏸ <b>Моніторинг призупинено</b>\n\nВласник тимчасово призупинив оновлення статусу."
+
+// msgChannelPausedBySystem is posted to the channel when the system auto-pauses monitoring.
+const msgChannelPausedBySystem = "⚠️ <b>Моніторинг призупинено автоматично</b>\n\nБот втратив доступ до каналу. Власник отримав сповіщення."
+
+// msgChannelResumed is posted to the channel when the owner resumes monitoring.
+const msgChannelResumed = "▶️ <b>Моніторинг відновлено</b>\n\nВласник відновив оновлення статусу."

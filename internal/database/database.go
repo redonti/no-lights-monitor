@@ -325,7 +325,7 @@ func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, e
 		       is_online, is_active, is_public, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors
-		WHERE channel_id IS NOT NULL AND channel_id != 0
+		WHERE channel_id IS NOT NULL AND channel_id != 0 AND is_active = TRUE
 		ORDER BY id
 	`)
 	if err != nil {

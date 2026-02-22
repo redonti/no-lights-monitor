@@ -237,10 +237,17 @@ const (
 // ── Buttons ───────────────────────────────────────────────────────────
 
 const (
-	msgEditBtnName    = "✏️ Змінити назву"
-	msgEditBtnAddress = "📍 Змінити адресу"
-	msgMapBtnHide     = "🗺 Прибрати з карти"
-	msgMapBtnShow     = "🗺 Додати на карту"
+	msgEditBtnName           = "✏️ Змінити назву"
+	msgEditBtnAddress        = "📍 Змінити адресу"
+	msgEditBtnRefreshChannel = "🔄 Оновити тег каналу"
+	msgMapBtnHide            = "🗺 Прибрати з карти"
+	msgMapBtnShow            = "🗺 Додати на карту"
+)
+
+const (
+	msgEditChannelRefreshDone     = "✅ Тег каналу оновлено: @%s"
+	msgEditChannelRefreshNoChange = "✅ Тег каналу вже актуальний: @%s"
+	msgEditChannelRefreshError    = "Не вдалося отримати дані каналу. Спробуйте пізніше."
 )
 
 // ── /test notification ────────────────────────────────────────────────

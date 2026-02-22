@@ -386,10 +386,16 @@ func (b *Bot) handleCallback(c tele.Context) error {
 
 	case "edit":
 		_ = c.Respond(&tele.CallbackResponse{})
-		keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{
+		rows := [][]tele.InlineButton{
 			{{Text: msgEditBtnName, Data: fmt.Sprintf("edit_name:%d", monitorID)}},
 			{{Text: msgEditBtnAddress, Data: fmt.Sprintf("edit_address:%d", monitorID)}},
-		}}
+		}
+		if targetMonitor.ChannelID != 0 {
+			rows = append(rows, []tele.InlineButton{
+				{Text: msgEditBtnRefreshChannel, Data: fmt.Sprintf("edit_channel_refresh:%d", monitorID)},
+			})
+		}
+		keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
 		return c.Send(fmt.Sprintf(msgEditChoose, html.EscapeString(targetMonitor.Name)), htmlOpts, keyboard)
 
 	case "edit_name":
@@ -411,6 +417,23 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		}
 		b.mu.Unlock()
 		return c.Send(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(targetMonitor.Address)), htmlOpts)
+
+	case "edit_channel_refresh":
+		_ = c.Respond(&tele.CallbackResponse{})
+		chat, err := b.bot.ChatByID(targetMonitor.ChannelID)
+		if err != nil {
+			log.Printf("[bot] failed to fetch channel info for monitor %d: %v", targetMonitor.ID, err)
+			return c.Send(msgEditChannelRefreshError, htmlOpts)
+		}
+		newName := chat.Username
+		if newName == targetMonitor.ChannelName {
+			return c.Send(fmt.Sprintf(msgEditChannelRefreshNoChange, newName), htmlOpts)
+		}
+		if err := b.db.UpdateMonitorChannelName(ctx, targetMonitor.ID, newName); err != nil {
+			log.Printf("[bot] failed to update channel name for monitor %d: %v", targetMonitor.ID, err)
+			return c.Send(msgError, htmlOpts)
+		}
+		return c.Send(fmt.Sprintf(msgEditChannelRefreshDone, newName), htmlOpts)
 
 	case "map_hide":
 		if err := b.db.SetMonitorPublic(ctx, monitorID, false); err != nil {

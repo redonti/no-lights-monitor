@@ -376,6 +376,14 @@ func (db *DB) UpdateMonitorName(ctx context.Context, id int64, name string) erro
 	return err
 }
 
+// UpdateMonitorChannelName updates the stored Telegram channel username for a monitor.
+func (db *DB) UpdateMonitorChannelName(ctx context.Context, id int64, channelName string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET channel_name = $2 WHERE id = $1
+	`, id, channelName)
+	return err
+}
+
 // UpdateMonitorAddress updates the address and coordinates of a monitor.
 func (db *DB) UpdateMonitorAddress(ctx context.Context, id int64, address string, lat, lng float64) error {
 	_, err := db.Pool.Exec(ctx, `

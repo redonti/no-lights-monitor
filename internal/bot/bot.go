@@ -300,6 +300,16 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		return c.Send(fmt.Sprintf(msgStopDone, msgStopOK, html.EscapeString(targetMonitor.Name)), htmlOpts)
 
 	case "resume":
+		// If there's a linked channel, verify the bot still has access before resuming.
+		if targetMonitor.ChannelID != 0 {
+			chat := &tele.Chat{ID: targetMonitor.ChannelID}
+			me := b.bot.Me
+			member, err := b.bot.ChatMemberOf(chat, me)
+			if err != nil || (member.Role != tele.Administrator && member.Role != tele.Creator) || !member.Rights.CanPostMessages {
+				_ = c.Respond(&tele.CallbackResponse{Text: msgResumeNoAccess})
+				return c.Send(fmt.Sprintf(msgResumeNoAccessDetail, html.EscapeString(targetMonitor.ChannelName)), htmlOpts)
+			}
+		}
 		if err := b.db.SetMonitorActive(ctx, monitorID, true); err != nil {
 			log.Printf("[bot] set monitor active error: %v", err)
 			return c.Respond(&tele.CallbackResponse{Text: msgResumeError})

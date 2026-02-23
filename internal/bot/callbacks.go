@@ -81,6 +81,8 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		return b.onCallbackOutageGroup(ctx, c, parts, targetMonitor)
 	case "edit_notify_outage":
 		return b.onCallbackEditNotifyOutage(ctx, c, targetMonitor)
+	case "edit_outage_photo":
+		return b.onCallbackEditOutagePhoto(ctx, c, targetMonitor)
 	case "map_hide":
 		return b.onCallbackMapHide(ctx, c, targetMonitor)
 	case "map_show":
@@ -227,6 +229,16 @@ func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
 		rows = append(rows, []tele.InlineButton{
 			{Text: outageBtnText, Data: fmt.Sprintf("edit_notify_outage:%d", m.ID)},
 		})
+		// Outage photo toggle (only if group is set and channel linked).
+		if m.ChannelID != 0 {
+			photoBtnText := msgEditBtnShowOutagePhoto
+			if m.OutagePhotoEnabled {
+				photoBtnText = msgEditBtnHideOutagePhoto
+			}
+			rows = append(rows, []tele.InlineButton{
+				{Text: photoBtnText, Data: fmt.Sprintf("edit_outage_photo:%d", m.ID)},
+			})
+		}
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
 	return c.Send(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name)), htmlOpts, keyboard)
@@ -368,6 +380,20 @@ func (b *Bot) onCallbackEditNotifyOutage(ctx context.Context, c tele.Context, m 
 	msg := msgNotifyOutageEnabled
 	if !newVal {
 		msg = msgNotifyOutageDisabled
+	}
+	_ = c.Respond(&tele.CallbackResponse{Text: msg})
+	return c.Send(msg)
+}
+
+func (b *Bot) onCallbackEditOutagePhoto(ctx context.Context, c tele.Context, m *models.Monitor) error {
+	newVal := !m.OutagePhotoEnabled
+	if err := b.db.SetMonitorOutagePhotoEnabled(ctx, m.ID, newVal); err != nil {
+		log.Printf("[bot] set outage_photo_enabled error: %v", err)
+		return c.Respond(&tele.CallbackResponse{Text: msgOutagePhotoError})
+	}
+	msg := msgOutagePhotoEnabled
+	if !newVal {
+		msg = msgOutagePhotoDisabled
 	}
 	_ = c.Respond(&tele.CallbackResponse{Text: msg})
 	return c.Send(msg)

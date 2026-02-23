@@ -15,7 +15,7 @@ import (
 const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	channel_id, channel_name, monitor_type, ping_target,
 	is_online, is_active, is_public, notify_address,
-	outage_region, outage_group, notify_outage,
+	outage_region, outage_group, notify_outage, outage_photo_enabled,
 	last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start,
 	outage_photo_message_id, outage_photo_updated_at, settings_token, created_at`
 
@@ -23,7 +23,7 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
 	m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
 	m.is_online, m.is_active, m.is_public, m.notify_address,
-	m.outage_region, m.outage_group, m.notify_outage,
+	m.outage_region, m.outage_group, m.notify_outage, m.outage_photo_enabled,
 	m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start,
 	m.outage_photo_message_id, m.outage_photo_updated_at, m.settings_token, m.created_at`
 
@@ -89,6 +89,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_region TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_group TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_outage BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_message_id INT NOT NULL DEFAULT 0;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_updated_at TIMESTAMPTZ;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_token UUID UNIQUE DEFAULT gen_random_uuid();
@@ -289,6 +290,14 @@ func (db *DB) SetMonitorNotifyOutage(ctx context.Context, id int64, notifyOutage
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE monitors SET notify_outage = $2 WHERE id = $1
 	`, id, notifyOutage)
+	return err
+}
+
+// SetMonitorOutagePhotoEnabled toggles whether the outage schedule photo is posted to the channel.
+func (db *DB) SetMonitorOutagePhotoEnabled(ctx context.Context, id int64, enabled bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET outage_photo_enabled = $2 WHERE id = $1
+	`, id, enabled)
 	return err
 }
 

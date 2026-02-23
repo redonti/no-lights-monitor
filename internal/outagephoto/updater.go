@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -104,7 +105,7 @@ func (u *Updater) runAll(ctx context.Context) {
 			continue
 		}
 
-		if !m.NotifyOutage {
+		if !m.OutagePhotoEnabled {
 			if m.OutagePhotoMessageID != 0 {
 				u.deleteOldPhoto(m)
 				if err := u.db.ClearOutagePhoto(ctx, m.ID); err != nil {
@@ -267,9 +268,13 @@ func (u *Updater) getCachedImage(cache *runCache, key, region, filename string) 
 	return img, nil
 }
 
+// reLetterDigit matches the boundary between letters and digits (e.g. "gpv1" → "gpv-1").
+var reLetterDigit = regexp.MustCompile(`([a-z])(\d)`)
+
 // groupToFilename converts a group ID like "GPV1.1" to "gpv-1-1-emergency.png".
 func groupToFilename(group string) string {
 	s := strings.ToLower(group)
+	s = reLetterDigit.ReplaceAllString(s, "${1}-${2}")
 	s = strings.ReplaceAll(s, ".", "-")
 	return s + "-emergency.png"
 }

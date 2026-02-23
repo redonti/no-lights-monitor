@@ -16,6 +16,7 @@ import (
 	"no-lights-monitor/internal/graph"
 	"no-lights-monitor/internal/heartbeat"
 	"no-lights-monitor/internal/outage"
+	"no-lights-monitor/internal/outagephoto"
 )
 
 const (
@@ -90,6 +91,11 @@ func main() {
 	tgBot.SetGraphUpdater(graphUpdater)
 	go graphUpdater.Start(ctx)
 	log.Println("graph updater started")
+
+	// --- Outage photo updater (hourly) ---
+	photoUpdater := outagephoto.NewUpdater(db, tgBot.TeleBot())
+	go photoUpdater.Start(ctx)
+	log.Println("outage photo updater started")
 
 	// --- Graceful shutdown ---
 	quit := make(chan os.Signal, 1)

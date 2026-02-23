@@ -31,8 +31,10 @@ type Monitor struct {
 	NotifyOutage       bool       `json:"notify_outage" db:"notify_outage"`   // whether to show outage schedule in notifications
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty" db:"last_heartbeat_at"`
 	LastStatusChangeAt time.Time  `json:"last_status_change_at" db:"last_status_change_at"`
-	GraphMessageID     int        `json:"graph_message_id" db:"graph_message_id"`
-	GraphWeekStart     *time.Time `json:"graph_week_start,omitempty" db:"graph_week_start"`
+	GraphMessageID       int        `json:"graph_message_id" db:"graph_message_id"`
+	GraphWeekStart       *time.Time `json:"graph_week_start,omitempty" db:"graph_week_start"`
+	OutagePhotoMessageID int        `json:"outage_photo_message_id" db:"outage_photo_message_id"`
+	OutagePhotoUpdatedAt *time.Time `json:"outage_photo_updated_at,omitempty" db:"outage_photo_updated_at"`
 	SettingsToken      string     `json:"settings_token" db:"settings_token"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 }

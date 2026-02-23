@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -9,6 +12,33 @@ import (
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/geocode"
 )
+
+var proxyHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+// ProxyOutage forwards outage API requests to the outage service.
+// Handles /api/outage/* routes.
+func (h *Handlers) ProxyOutage(c *fiber.Ctx) error {
+	if h.OutageServiceURL == "" {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "outage service not configured"})
+	}
+	// Build target URL: take everything after /api/outage
+	path := c.Params("*")
+	url := fmt.Sprintf("%s/api/outage/%s", h.OutageServiceURL, path)
+
+	resp, err := proxyHTTPClient.Get(url)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "outage service unavailable"})
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "failed to read outage response"})
+	}
+
+	c.Set("Content-Type", resp.Header.Get("Content-Type"))
+	return c.Status(resp.StatusCode).Send(body)
+}
 
 // GetSettings returns the full monitor configuration for the settings page.
 func (h *Handlers) GetSettings(c *fiber.Ctx) error {

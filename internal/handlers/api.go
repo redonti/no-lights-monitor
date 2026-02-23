@@ -18,6 +18,8 @@ type Handlers struct {
 	DB    *database.DB
 	Cache *cache.Cache // For API service (stateless ping)
 
+	OutageServiceURL string // URL of the outage data service (for proxying)
+
 	// In-memory response cache for /api/monitors.
 	monitorCache   []byte
 	monitorCacheAt time.Time

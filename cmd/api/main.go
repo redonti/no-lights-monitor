@@ -58,10 +58,13 @@ func main() {
 	app.Use(cors.New())
 
 	// API routes
-	h := &handlers.Handlers{DB: db, Cache: redisCache}
+	h := &handlers.Handlers{DB: db, Cache: redisCache, OutageServiceURL: cfg.OutageServiceURL}
 	api := app.Group("/api")
 	api.Get("/ping/:token", h.PingAPI)
 	api.Get("/monitors", h.GetMonitors)
+
+	// Proxy outage API from the outage service (for settings page)
+	api.Get("/outage/*", h.ProxyOutage)
 
 	// Settings API (accessed by settings_token)
 	api.Get("/settings/:token", h.GetSettings)

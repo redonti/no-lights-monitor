@@ -15,6 +15,7 @@ import (
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/graph"
 	"no-lights-monitor/internal/heartbeat"
+	"no-lights-monitor/internal/outage"
 )
 
 const (
@@ -68,8 +69,12 @@ func main() {
 		log.Fatalf("bot: %v", err)
 	}
 
+	// --- Outage Client ---
+	outageClient := outage.NewClient(cfg.OutageServiceURL)
+	tgBot.SetOutageClient(outageClient)
+
 	// Wire up the notifier now that the bot exists.
-	notifier := bot.NewNotifier(tgBot.TeleBot(), db)
+	notifier := bot.NewNotifier(tgBot.TeleBot(), db, outageClient)
 	hbService.SetNotifier(notifier)
 
 	go tgBot.Start()

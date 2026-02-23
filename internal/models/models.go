@@ -26,6 +26,9 @@ type Monitor struct {
 	IsActive           bool       `json:"is_active"`  // whether monitoring is enabled
 	IsPublic           bool       `json:"is_public"`       // whether shown on public map
 	NotifyAddress      bool       `json:"notify_address"`  // whether to show address in notifications
+	OutageRegion       string     `json:"outage_region"`   // outage-data-ua region ID (e.g. "kyiv")
+	OutageGroup        string     `json:"outage_group"`    // outage-data-ua group ID (e.g. "GPV1.1")
+	NotifyOutage       bool       `json:"notify_outage"`   // whether to show outage schedule in notifications
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty"`
 	LastStatusChangeAt time.Time  `json:"last_status_change_at"`
 	GraphMessageID     int        `json:"graph_message_id"`

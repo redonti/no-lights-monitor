@@ -25,7 +25,8 @@ type Config struct {
 	OfflineThreshold    int // seconds without ping before marking offline
 	AdminLogin          string
 	AdminPassword       string
-	OutageFetchInterval int // seconds between outage data fetches
+	OutageFetchInterval int    // seconds between outage data fetches
+	OutageServiceURL    string // URL of the outage data service
 }
 
 func Load() *Config {
@@ -41,6 +42,7 @@ func Load() *Config {
 		AdminLogin:          getEnv("ADMIN_LOGIN", ""),
 		AdminPassword:       getEnv("ADMIN_PASSWORD", ""),
 		OutageFetchInterval: getEnvInt("OUTAGE_FETCH_INTERVAL", DefaultOutageFetchIntervalSec),
+		OutageServiceURL:    getEnv("OUTAGE_SERVICE_URL", "http://localhost:8090"),
 	}
 }
 

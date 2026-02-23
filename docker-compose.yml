@@ -109,12 +109,14 @@ services:
       BOT_TOKEN: ${BOT_TOKEN}
       BASE_URL: ${BASE_URL:-http://localhost:8080}
       GRAPH_SERVICE_URL: http://graph-service:8000
+      OUTAGE_SERVICE_URL: http://outage:8090
       OFFLINE_THRESHOLD: ${OFFLINE_THRESHOLD:-300}
       PING_INTERVAL: ${PING_INTERVAL:-300}
     depends_on:
       - postgres
       - redis
       - graph-service
+      - outage
     restart: unless-stopped
     logging:
       driver: journald

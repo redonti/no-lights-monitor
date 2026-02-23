@@ -252,6 +252,23 @@ const (
 	msgNotifyAddressError    = "Помилка зміни налаштування."
 )
 
+// ── Outage group ──────────────────────────────────────────────────────
+
+const (
+	msgEditBtnOutage        = "⚡ Група відключень"
+	msgEditBtnShowOutage    = "⚡ Показувати графік в сповіщеннях"
+	msgEditBtnHideOutage    = "⚡ Приховати графік зі сповіщень"
+	msgOutageRegionPrompt   = "Оберіть регіон:"
+	msgOutageGroupPrompt    = "Оберіть групу відключень:"
+	msgOutageGroupSet       = "✅ Групу відключень встановлено: <b>%s</b> (%s)"
+	msgOutageGroupError     = "Не вдалося отримати дані про відключення. Спробуйте пізніше."
+	msgNotifyOutageEnabled  = "✅ Графік відключень буде показано в сповіщеннях."
+	msgNotifyOutageDisabled = "✅ Графік відключень приховано зі сповіщень."
+	msgNotifyOutageError    = "Помилка зміни налаштування."
+	msgOutageNextPlanned    = "\n⏱ <i>Наступне планове: %s</i>"
+	msgOutageExpected       = "\n⏱ <i>Очікуємо через ~%s, о %s</i>"
+)
+
 const (
 	msgEditChannelRefreshDone     = "✅ Тег каналу оновлено: @%s"
 	msgEditChannelRefreshNoChange = "✅ Тег каналу вже актуальний: @%s"

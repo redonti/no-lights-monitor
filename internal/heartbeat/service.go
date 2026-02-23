@@ -17,7 +17,7 @@ import (
 
 // Notifier sends Telegram messages on status changes.
 type Notifier interface {
-	NotifyStatusChange(monitorID, channelID int64, name, address string, notifyAddress, isOnline bool, duration time.Duration, when time.Time)
+	NotifyStatusChange(monitorID, channelID int64, name, address string, notifyAddress, isOnline bool, duration time.Duration, when time.Time, outageRegion, outageGroup string, notifyOutage bool)
 }
 
 // monitorInfo is the in-memory representation used for fast ping lookups.
@@ -33,6 +33,9 @@ type monitorInfo struct {
 	IsOnline       bool
 	IsActive       bool // whether monitoring is enabled
 	NotifyAddress  bool
+	OutageRegion   string
+	OutageGroup    string
+	NotifyOutage   bool
 	LastChange  time.Time
 	mu          sync.Mutex
 }
@@ -85,6 +88,9 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 			IsOnline:      m.IsOnline,
 			IsActive:      m.IsActive,
 			NotifyAddress: m.NotifyAddress,
+			OutageRegion:  m.OutageRegion,
+			OutageGroup:   m.OutageGroup,
+			NotifyOutage:  m.NotifyOutage,
 			LastChange:    m.LastStatusChangeAt,
 		})
 	}
@@ -106,6 +112,9 @@ func (s *Service) RegisterMonitor(m *models.Monitor) {
 		IsOnline:      false,
 		IsActive:      m.IsActive,
 		NotifyAddress: m.NotifyAddress,
+		OutageRegion:  m.OutageRegion,
+		OutageGroup:   m.OutageGroup,
+		NotifyOutage:  m.NotifyOutage,
 		LastChange:    m.LastStatusChangeAt,
 	})
 }
@@ -134,6 +143,33 @@ func (s *Service) SetMonitorNotifyAddress(token string, notifyAddress bool) bool
 	info := val.(*monitorInfo)
 	info.mu.Lock()
 	info.NotifyAddress = notifyAddress
+	info.mu.Unlock()
+	return true
+}
+
+// SetMonitorOutageGroup updates the outage region and group of a monitor in memory.
+func (s *Service) SetMonitorOutageGroup(token, region, group string) bool {
+	val, ok := s.monitors.Load(token)
+	if !ok {
+		return false
+	}
+	info := val.(*monitorInfo)
+	info.mu.Lock()
+	info.OutageRegion = region
+	info.OutageGroup = group
+	info.mu.Unlock()
+	return true
+}
+
+// SetMonitorNotifyOutage updates the notify_outage flag of a monitor in memory.
+func (s *Service) SetMonitorNotifyOutage(token string, notifyOutage bool) bool {
+	val, ok := s.monitors.Load(token)
+	if !ok {
+		return false
+	}
+	info := val.(*monitorInfo)
+	info.mu.Lock()
+	info.NotifyOutage = notifyOutage
 	info.mu.Unlock()
 	return true
 }
@@ -265,6 +301,9 @@ func (s *Service) checkAll(ctx context.Context) {
 		monitorName := info.Name
 		monitorAddress := info.Address
 		notifyAddress := info.NotifyAddress
+		outageRegion := info.OutageRegion
+		outageGroup := info.OutageGroup
+		notifyOutage := info.NotifyOutage
 		channelID := info.ChannelID
 		info.mu.Unlock()
 
@@ -281,7 +320,7 @@ func (s *Service) checkAll(ctx context.Context) {
 				if (!isNowOnline){
 					when = now.Add(-s.threshold)
 				}
-				go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, monitorAddress, notifyAddress, isNowOnline, duration, when)
+				go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, monitorAddress, notifyAddress, isNowOnline, duration, when, outageRegion, outageGroup, notifyOutage)
 			}
 
 			if isNowOnline {

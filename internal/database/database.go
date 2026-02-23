@@ -38,7 +38,9 @@ func scanMonitor(scanner interface {
 		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
 		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
 		&m.MonitorType, &m.PingTarget,
-		&m.IsOnline, &m.IsActive, &m.IsPublic, &m.NotifyAddress, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
+		&m.IsOnline, &m.IsActive, &m.IsPublic, &m.NotifyAddress,
+		&m.OutageRegion, &m.OutageGroup, &m.NotifyOutage,
+		&m.LastHeartbeatAt, &m.LastStatusChangeAt,
 		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
 	)
 }
@@ -79,6 +81,9 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS ping_target TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT TRUE;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_address BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_region TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_group TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_outage BOOLEAN NOT NULL DEFAULT FALSE;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_user_id ON monitors(user_id);
@@ -142,8 +147,9 @@ func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address str
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, user_id, token, name, address, latitude, longitude,
 		          channel_id, channel_name, monitor_type, ping_target,
-		          is_online, is_active, is_public, notify_address, last_heartbeat_at,
-		          last_status_change_at, graph_message_id, graph_week_start, created_at
+		          is_online, is_active, is_public, notify_address,
+		          outage_region, outage_group, notify_outage,
+		          last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
 	`, userID, name, address, lat, lng, channelID, channelName, monitorType, pingTarget)
 	err := scanMonitor(row, &m)
 	if err != nil {
@@ -158,8 +164,9 @@ func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Moni
 	row := db.Pool.QueryRow(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
-		       last_status_change_at, graph_message_id, graph_week_start, created_at
+		       is_online, is_active, is_public, notify_address,
+		       outage_region, outage_group, notify_outage,
+		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors WHERE token = $1
 	`, token)
 	err := scanMonitor(row, &m)
@@ -202,8 +209,9 @@ func (db *DB) GetPublicMonitors(ctx context.Context) ([]*models.Monitor, error) 
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
-		       last_status_change_at, graph_message_id, graph_week_start, created_at
+		       is_online, is_active, is_public, notify_address,
+		       outage_region, outage_group, notify_outage,
+		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors WHERE is_public = TRUE AND is_active = TRUE ORDER BY id
 	`)
 	if err != nil {
@@ -227,8 +235,9 @@ func (db *DB) GetAllMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
-		       last_status_change_at, graph_message_id, graph_week_start, created_at
+		       is_online, is_active, is_public, notify_address,
+		       outage_region, outage_group, notify_outage,
+		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors ORDER BY id
 	`)
 	if err != nil {
@@ -323,8 +332,9 @@ func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, e
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
-		       last_status_change_at, graph_message_id, graph_week_start, created_at
+		       is_online, is_active, is_public, notify_address,
+		       outage_region, outage_group, notify_outage,
+		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors
 		WHERE channel_id IS NOT NULL AND channel_id != 0 AND is_active = TRUE
 		ORDER BY id
@@ -366,6 +376,22 @@ func (db *DB) SetMonitorPublic(ctx context.Context, id int64, isPublic bool) err
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE monitors SET is_public = $2 WHERE id = $1
 	`, id, isPublic)
+	return err
+}
+
+// SetMonitorOutageGroup saves the outage region and group for a monitor.
+func (db *DB) SetMonitorOutageGroup(ctx context.Context, id int64, region, group string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET outage_region = $2, outage_group = $3 WHERE id = $1
+	`, id, region, group)
+	return err
+}
+
+// SetMonitorNotifyOutage toggles whether the outage schedule is shown in notifications.
+func (db *DB) SetMonitorNotifyOutage(ctx context.Context, id int64, notifyOutage bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET notify_outage = $2 WHERE id = $1
+	`, id, notifyOutage)
 	return err
 }
 

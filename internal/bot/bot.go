@@ -16,6 +16,7 @@ import (
 	"no-lights-monitor/internal/geocode"
 	"no-lights-monitor/internal/heartbeat"
 	"no-lights-monitor/internal/models"
+	"no-lights-monitor/internal/outage"
 
 	tele "gopkg.in/telebot.v3"
 )
@@ -58,6 +59,7 @@ type Bot struct {
 	heartbeatSvc  *heartbeat.Service
 	baseURL       string
 	graphUpdater  GraphUpdater
+	outageClient  *outage.Client
 	conversations map[int64]*conversationData
 	mu            sync.RWMutex
 }
@@ -116,6 +118,11 @@ func (b *Bot) Stop() {
 // SetGraphUpdater wires the graph updater after initialization (avoids circular deps).
 func (b *Bot) SetGraphUpdater(g GraphUpdater) {
 	b.graphUpdater = g
+}
+
+// SetOutageClient wires the outage service client.
+func (b *Bot) SetOutageClient(c *outage.Client) {
+	b.outageClient = c
 }
 
 // TeleBot returns the underlying telebot instance (used by the notifier).
@@ -247,7 +254,7 @@ func (b *Bot) handleCallback(c tele.Context) error {
 	log.Printf("[bot] callback %q from user %d (@%s)", c.Callback().Data, c.Sender().ID, c.Sender().Username)
 	data := c.Callback().Data
 	parts := strings.Split(data, ":")
-	if len(parts) != 2 {
+	if len(parts) < 2 {
 		return c.Respond(&tele.CallbackResponse{Text: msgInvalidFormat})
 	}
 
@@ -400,6 +407,20 @@ func (b *Bot) handleCallback(c tele.Context) error {
 				{Text: msgEditBtnRefreshChannel, Data: fmt.Sprintf("edit_channel_refresh:%d", monitorID)},
 			})
 		}
+		// Outage group button.
+		rows = append(rows, []tele.InlineButton{
+			{Text: msgEditBtnOutage, Data: fmt.Sprintf("edit_outage:%d", monitorID)},
+		})
+		// Outage notify toggle (only if group is set).
+		if targetMonitor.OutageGroup != "" {
+			outageBtnText := msgEditBtnShowOutage
+			if targetMonitor.NotifyOutage {
+				outageBtnText = msgEditBtnHideOutage
+			}
+			rows = append(rows, []tele.InlineButton{
+				{Text: outageBtnText, Data: fmt.Sprintf("edit_notify_outage:%d", monitorID)},
+			})
+		}
 		keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
 		return c.Send(fmt.Sprintf(msgEditChoose, html.EscapeString(targetMonitor.Name)), htmlOpts, keyboard)
 
@@ -451,6 +472,87 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		msg := msgNotifyAddressEnabled
 		if !newVal {
 			msg = msgNotifyAddressDisabled
+		}
+		_ = c.Respond(&tele.CallbackResponse{Text: msg})
+		return c.Send(msg)
+
+	case "edit_outage":
+		_ = c.Respond(&tele.CallbackResponse{})
+		if b.outageClient == nil {
+			return c.Send(msgOutageGroupError, htmlOpts)
+		}
+		regions, err := b.outageClient.GetRegions()
+		if err != nil {
+			log.Printf("[bot] outage get regions error: %v", err)
+			return c.Send(msgOutageGroupError, htmlOpts)
+		}
+		var regionRows [][]tele.InlineButton
+		for _, r := range regions {
+			regionRows = append(regionRows, []tele.InlineButton{
+				{Text: r.RegionID, Data: fmt.Sprintf("outage_r:%d:%s", monitorID, r.RegionID)},
+			})
+		}
+		keyboard := &tele.ReplyMarkup{InlineKeyboard: regionRows}
+		return c.Send(msgOutageRegionPrompt, htmlOpts, keyboard)
+
+	case "outage_r":
+		_ = c.Respond(&tele.CallbackResponse{})
+		if len(parts) < 3 {
+			return c.Send(msgInvalidFormat, htmlOpts)
+		}
+		region := parts[2]
+		if b.outageClient == nil {
+			return c.Send(msgOutageGroupError, htmlOpts)
+		}
+		groups, err := b.outageClient.GetGroups(region)
+		if err != nil {
+			log.Printf("[bot] outage get groups error: %v", err)
+			return c.Send(msgOutageGroupError, htmlOpts)
+		}
+		var groupRows [][]tele.InlineButton
+		// Show groups in rows of 3 buttons.
+		for i := 0; i < len(groups); i += 3 {
+			var row []tele.InlineButton
+			for j := i; j < i+3 && j < len(groups); j++ {
+				row = append(row, tele.InlineButton{
+					Text: groups[j].Name,
+					Data: fmt.Sprintf("outage_g:%d:%s:%s", monitorID, region, groups[j].ID),
+				})
+			}
+			groupRows = append(groupRows, row)
+		}
+		keyboard := &tele.ReplyMarkup{InlineKeyboard: groupRows}
+		return c.Send(msgOutageGroupPrompt, htmlOpts, keyboard)
+
+	case "outage_g":
+		_ = c.Respond(&tele.CallbackResponse{})
+		if len(parts) < 4 {
+			return c.Send(msgInvalidFormat, htmlOpts)
+		}
+		region := parts[2]
+		group := parts[3]
+		if err := b.db.SetMonitorOutageGroup(ctx, monitorID, region, group); err != nil {
+			log.Printf("[bot] set outage group error: %v", err)
+			return c.Send(msgError, htmlOpts)
+		}
+		b.heartbeatSvc.SetMonitorOutageGroup(targetMonitor.Token, region, group)
+		// Auto-enable notify_outage when setting a group.
+		if err := b.db.SetMonitorNotifyOutage(ctx, monitorID, true); err != nil {
+			log.Printf("[bot] set notify_outage error: %v", err)
+		}
+		b.heartbeatSvc.SetMonitorNotifyOutage(targetMonitor.Token, true)
+		return c.Send(fmt.Sprintf(msgOutageGroupSet, html.EscapeString(group), html.EscapeString(region)), htmlOpts)
+
+	case "edit_notify_outage":
+		newVal := !targetMonitor.NotifyOutage
+		if err := b.db.SetMonitorNotifyOutage(ctx, monitorID, newVal); err != nil {
+			log.Printf("[bot] set notify_outage error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: msgNotifyOutageError})
+		}
+		b.heartbeatSvc.SetMonitorNotifyOutage(targetMonitor.Token, newVal)
+		msg := msgNotifyOutageEnabled
+		if !newVal {
+			msg = msgNotifyOutageDisabled
 		}
 		_ = c.Respond(&tele.CallbackResponse{Text: msg})
 		return c.Send(msg)
@@ -1104,17 +1206,18 @@ func NotifyChannelError(ctx context.Context, b *tele.Bot, db *database.DB, err e
 
 // TelegramNotifier implements heartbeat.Notifier using the Telegram bot.
 type TelegramNotifier struct {
-	bot *tele.Bot
-	db  *database.DB
+	bot          *tele.Bot
+	db           *database.DB
+	outageClient *outage.Client
 }
 
-func NewNotifier(b *tele.Bot, db *database.DB) *TelegramNotifier {
-	return &TelegramNotifier{bot: b, db: db}
+func NewNotifier(b *tele.Bot, db *database.DB, oc *outage.Client) *TelegramNotifier {
+	return &TelegramNotifier{bot: b, db: db, outageClient: oc}
 }
 
 // NotifyStatusChange sends a status message to the linked Telegram channel.
 // On channel access errors the monitor is paused and the owner is notified via DM.
-func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name, address string, notifyAddress, isOnline bool, duration time.Duration, when time.Time) {
+func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name, address string, notifyAddress, isOnline bool, duration time.Duration, when time.Time, outageRegion, outageGroup string, notifyOutage bool) {
 	var msg string
 	dur := database.FormatDuration(duration)
 	kyiv, _ := time.LoadLocation("Europe/Kyiv")
@@ -1128,6 +1231,13 @@ func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name, 
 
 	if notifyAddress && address != "" {
 		msg += fmt.Sprintf(msgNotifyAddressLine, html.EscapeString(address))
+	}
+
+	// Append outage schedule info if enabled.
+	if notifyOutage && outageRegion != "" && outageGroup != "" && n.outageClient != nil {
+		if outageLine := n.buildOutageLine(outageRegion, outageGroup, isOnline, when); outageLine != "" {
+			msg += outageLine
+		}
 	}
 
 	chat := &tele.Chat{ID: channelID}
@@ -1144,4 +1254,85 @@ func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name, 
 			log.Printf("[bot] failed to send notification to channel %d: %v", channelID, err)
 		}
 	}
+}
+
+// buildOutageLine fetches the outage schedule and builds the notification line.
+// For lights ON: shows next planned outage window.
+// For lights OFF: shows expected restoration time.
+func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, when time.Time) string {
+	fact, err := n.outageClient.GetGroupFact(region, group)
+	if err != nil {
+		log.Printf("[bot] outage fetch error for %s/%s: %v", region, group, err)
+		return ""
+	}
+
+	kyiv, _ := time.LoadLocation("Europe/Kyiv")
+	nowKyiv := when.In(kyiv)
+	currentHour := nowKyiv.Hour() // 0-23
+
+	if isOnline {
+		// Find next contiguous outage block starting from current hour.
+		start, end := findNextOutageBlock(fact.Hours, currentHour)
+		if start < 0 {
+			return ""
+		}
+		return fmt.Sprintf(msgOutageNextPlanned, fmt.Sprintf("%02d:00 - %02d:00", start, end))
+	}
+
+	// Lights OFF: find next "yes" hour to estimate restoration.
+	nextOn := findNextOnHour(fact.Hours, currentHour)
+	if nextOn < 0 {
+		return ""
+	}
+	hoursUntil := nextOn - currentHour
+	if hoursUntil <= 0 {
+		hoursUntil += 24
+	}
+	durStr := database.FormatDuration(time.Duration(hoursUntil) * time.Hour)
+	return fmt.Sprintf(msgOutageExpected, durStr, fmt.Sprintf("%02d:00", nextOn))
+}
+
+// findNextOutageBlock finds the next contiguous block of outage hours
+// (status "no", "first", or "second") starting from the given hour.
+// Returns (startHour, endHour) or (-1, -1) if no outage found.
+func findNextOutageBlock(hours map[string]string, currentHour int) (int, int) {
+	// Search from current hour +1 through +24 hours.
+	for offset := 1; offset <= 24; offset++ {
+		h := (currentHour + offset) % 24
+		hourKey := strconv.Itoa(h + 1) // hours in data are 1-24
+		status := hours[hourKey]
+		if status == "no" || status == "first" || status == "second" {
+			// Found start of outage block. Now find the end.
+			start := h
+			end := h
+			for ext := 1; ext < 24; ext++ {
+				nextH := (h + ext) % 24
+				nextKey := strconv.Itoa(nextH + 1)
+				nextStatus := hours[nextKey]
+				if nextStatus == "no" || nextStatus == "first" || nextStatus == "second" {
+					end = nextH
+				} else {
+					break
+				}
+			}
+			// end is the last outage hour, so the block ends at end+1.
+			endDisplay := (end + 1) % 24
+			return start, endDisplay
+		}
+	}
+	return -1, -1
+}
+
+// findNextOnHour finds the next hour with "yes" or "first" status (power returning).
+// Returns the hour (0-23) or -1 if not found.
+func findNextOnHour(hours map[string]string, currentHour int) int {
+	for offset := 1; offset <= 24; offset++ {
+		h := (currentHour + offset) % 24
+		hourKey := strconv.Itoa(h + 1) // hours in data are 1-24
+		status := hours[hourKey]
+		if status == "yes" {
+			return h
+		}
+	}
+	return -1
 }

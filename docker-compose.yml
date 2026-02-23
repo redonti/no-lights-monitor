@@ -82,9 +82,11 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       ADMIN_LOGIN: ${ADMIN_LOGIN}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OUTAGE_SERVICE_URL: http://outage:8090
     depends_on:
       - postgres
       - redis
+      - outage
     restart: unless-stopped
     logging:
       driver: journald

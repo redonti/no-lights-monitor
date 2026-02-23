@@ -78,7 +78,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS monitor_type TEXT NOT NULL DEFAULT 'heartbeat';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS ping_target TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT TRUE;
-	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_address BOOLEAN NOT NULL DEFAULT TRUE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_address BOOLEAN NOT NULL DEFAULT FALSE;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_user_id ON monitors(user_id);

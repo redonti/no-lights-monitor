@@ -5,10 +5,29 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"no-lights-monitor/internal/models"
 )
+
+// Column lists — update these (+ the struct db tags) when adding new fields.
+const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
+	channel_id, channel_name, monitor_type, ping_target,
+	is_online, is_active, is_public, notify_address,
+	outage_region, outage_group, notify_outage,
+	last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at`
+
+// monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
+const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
+	m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
+	m.is_online, m.is_active, m.is_public, m.notify_address,
+	m.outage_region, m.outage_group, m.notify_outage,
+	m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.created_at`
+
+const userColumns = `id, telegram_id, username, first_name, created_at`
+
+const statusEventColumns = `id, monitor_id, is_online, timestamp`
 
 type DB struct {
 	Pool *pgxpool.Pool
@@ -27,22 +46,6 @@ func New(ctx context.Context, databaseURL string) (*DB, error) {
 
 func (db *DB) Close() {
 	db.Pool.Close()
-}
-
-// scanMonitor is a helper that scans a row into a Monitor struct.
-// It works with both pgx.Row and pgx.Rows since both have a Scan method.
-func scanMonitor(scanner interface {
-	Scan(dest ...interface{}) error
-}, m *models.Monitor) error {
-	return scanner.Scan(
-		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
-		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
-		&m.MonitorType, &m.PingTarget,
-		&m.IsOnline, &m.IsActive, &m.IsPublic, &m.NotifyAddress,
-		&m.OutageRegion, &m.OutageGroup, &m.NotifyOutage,
-		&m.LastHeartbeatAt, &m.LastStatusChangeAt,
-		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
-	)
 }
 
 // Migrate creates the schema if it doesn't exist.
@@ -102,89 +105,67 @@ func (db *DB) Migrate(ctx context.Context) error {
 	return err
 }
 
+// ── User queries ─────────────────────────────────────────────────────
+
 // UpsertUser creates or updates a user and returns their record.
 func (db *DB) UpsertUser(ctx context.Context, telegramID int64, username, firstName string) (*models.User, error) {
-	var u models.User
-	err := db.Pool.QueryRow(ctx, `
+	rows, err := db.Pool.Query(ctx, `
 		INSERT INTO users (telegram_id, username, first_name)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (telegram_id) DO UPDATE SET username = $2, first_name = $3
-		RETURNING id, telegram_id, username, first_name, created_at
-	`, telegramID, username, firstName).Scan(&u.ID, &u.TelegramID, &u.Username, &u.FirstName, &u.CreatedAt)
+		RETURNING `+userColumns+`
+	`, telegramID, username, firstName)
 	if err != nil {
 		return nil, err
 	}
-	return &u, nil
+	user, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.User])
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // GetAllUsers returns every user in the database.
 func (db *DB) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	rows, err := db.Pool.Query(ctx, `
-		SELECT id, telegram_id, username, first_name, created_at
-		FROM users ORDER BY created_at DESC
+		SELECT `+userColumns+` FROM users ORDER BY created_at DESC
 	`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var users []*models.User
-	for rows.Next() {
-		var u models.User
-		if err := rows.Scan(&u.ID, &u.TelegramID, &u.Username, &u.FirstName, &u.CreatedAt); err != nil {
-			return nil, err
-		}
-		users = append(users, &u)
-	}
-	return users, nil
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.User])
 }
+
+// ── Monitor queries ──────────────────────────────────────────────────
 
 // CreateMonitor inserts a new monitor and returns it (with generated token).
 func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address string, lat, lng float64, channelID int64, channelName, monitorType, pingTarget string) (*models.Monitor, error) {
-	var m models.Monitor
-	row := db.Pool.QueryRow(ctx, `
+	rows, err := db.Pool.Query(ctx, `
 		INSERT INTO monitors (user_id, name, address, latitude, longitude, channel_id, channel_name, monitor_type, ping_target)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, user_id, token, name, address, latitude, longitude,
-		          channel_id, channel_name, monitor_type, ping_target,
-		          is_online, is_active, is_public, notify_address,
-		          outage_region, outage_group, notify_outage,
-		          last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
+		RETURNING `+monitorColumns+`
 	`, userID, name, address, lat, lng, channelID, channelName, monitorType, pingTarget)
-	err := scanMonitor(row, &m)
 	if err != nil {
 		return nil, err
 	}
-	return &m, nil
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.Monitor])
 }
 
 // GetMonitorByToken returns a monitor by its unique token.
 func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Monitor, error) {
-	var m models.Monitor
-	row := db.Pool.QueryRow(ctx, `
-		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address,
-		       outage_region, outage_group, notify_outage,
-		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
-		FROM monitors WHERE token = $1
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors WHERE token = $1
 	`, token)
-	err := scanMonitor(row, &m)
 	if err != nil {
 		return nil, err
 	}
-	return &m, nil
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.Monitor])
 }
 
 // GetMonitorsByTelegramID returns all monitors for the user with the given Telegram ID.
 func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
-		SELECT m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
-		       m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
-		       m.is_online, m.is_active, m.is_public, m.notify_address,
-		       m.outage_region, m.outage_group, m.notify_outage,
-		       m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.created_at
-		FROM monitors m
+		SELECT `+monitorColumnsAliased+` FROM monitors m
 		JOIN users u ON u.id = m.user_id
 		WHERE u.telegram_id = $1
 		ORDER BY m.created_at DESC
@@ -192,70 +173,46 @@ func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var monitors []*models.Monitor
-	for rows.Next() {
-		var m models.Monitor
-		if err := scanMonitor(rows, &m); err != nil {
-			return nil, err
-		}
-		monitors = append(monitors, &m)
-	}
-	return monitors, nil
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
 }
 
 // GetPublicMonitors returns monitors that are visible on the public map.
 func (db *DB) GetPublicMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
-		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address,
-		       outage_region, outage_group, notify_outage,
-		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
-		FROM monitors WHERE is_public = TRUE AND is_active = TRUE ORDER BY id
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE is_public = TRUE AND is_active = TRUE ORDER BY id
 	`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var monitors []*models.Monitor
-	for rows.Next() {
-		var m models.Monitor
-		if err := scanMonitor(rows, &m); err != nil {
-			return nil, err
-		}
-		monitors = append(monitors, &m)
-	}
-	return monitors, nil
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
 }
 
 // GetAllMonitors returns every monitor in the database.
 func (db *DB) GetAllMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
-		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address,
-		       outage_region, outage_group, notify_outage,
-		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
-		FROM monitors ORDER BY id
+		SELECT `+monitorColumns+` FROM monitors ORDER BY id
 	`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var monitors []*models.Monitor
-	for rows.Next() {
-		var m models.Monitor
-		if err := scanMonitor(rows, &m); err != nil {
-			return nil, err
-		}
-		monitors = append(monitors, &m)
-	}
-	return monitors, nil
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
 }
+
+// GetMonitorsWithChannels returns all monitors that have a Telegram channel linked.
+func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE channel_id IS NOT NULL AND channel_id != 0 AND is_active = TRUE
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// ── Monitor updates ──────────────────────────────────────────────────
 
 // UpdateMonitorStatus sets online/offline, updates the status change timestamp,
 // and logs a status event for historical graphs.
@@ -274,86 +231,6 @@ func (db *DB) UpdateMonitorStatus(ctx context.Context, id int64, isOnline bool) 
 		INSERT INTO status_events (monitor_id, is_online) VALUES ($1, $2)
 	`, id, isOnline)
 	return err
-}
-
-// GetLastEventBefore returns the most recent status event strictly before the given time.
-// Returns nil, nil if no such event exists.
-func (db *DB) GetLastEventBefore(ctx context.Context, monitorID int64, before time.Time) (*models.StatusEvent, error) {
-	var e models.StatusEvent
-	err := db.Pool.QueryRow(ctx, `
-		SELECT id, monitor_id, is_online, timestamp
-		FROM status_events
-		WHERE monitor_id = $1 AND timestamp < $2
-		ORDER BY timestamp DESC
-		LIMIT 1
-	`, monitorID, before).Scan(&e.ID, &e.MonitorID, &e.IsOnline, &e.Timestamp)
-	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &e, nil
-}
-
-// GetStatusHistory returns status events for a monitor within a time range.
-func (db *DB) GetStatusHistory(ctx context.Context, monitorID int64, from, to time.Time) ([]*models.StatusEvent, error) {
-	rows, err := db.Pool.Query(ctx, `
-		SELECT id, monitor_id, is_online, timestamp
-		FROM status_events
-		WHERE monitor_id = $1 AND timestamp >= $2 AND timestamp <= $3
-		ORDER BY timestamp ASC
-	`, monitorID, from, to)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var events []*models.StatusEvent
-	for rows.Next() {
-		var e models.StatusEvent
-		if err := rows.Scan(&e.ID, &e.MonitorID, &e.IsOnline, &e.Timestamp); err != nil {
-			return nil, err
-		}
-		events = append(events, &e)
-	}
-	return events, nil
-}
-
-// UpdateGraphMessage stores the Telegram message ID and week start for the current graph.
-func (db *DB) UpdateGraphMessage(ctx context.Context, monitorID int64, messageID int, weekStart time.Time) error {
-	_, err := db.Pool.Exec(ctx, `
-		UPDATE monitors SET graph_message_id = $2, graph_week_start = $3 WHERE id = $1
-	`, monitorID, messageID, weekStart)
-	return err
-}
-
-// GetMonitorsWithChannels returns all monitors that have a Telegram channel linked.
-func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, error) {
-	rows, err := db.Pool.Query(ctx, `
-		SELECT id, user_id, token, name, address, latitude, longitude,
-		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, notify_address,
-		       outage_region, outage_group, notify_outage,
-		       last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at
-		FROM monitors
-		WHERE channel_id IS NOT NULL AND channel_id != 0 AND is_active = TRUE
-		ORDER BY id
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var monitors []*models.Monitor
-	for rows.Next() {
-		var m models.Monitor
-		if err := scanMonitor(rows, &m); err != nil {
-			return nil, err
-		}
-		monitors = append(monitors, &m)
-	}
-	return monitors, nil
 }
 
 // UpdateMonitorHeartbeat sets the last heartbeat timestamp.
@@ -428,6 +305,14 @@ func (db *DB) UpdateMonitorAddress(ctx context.Context, id int64, address string
 	return err
 }
 
+// UpdateGraphMessage stores the Telegram message ID and week start for the current graph.
+func (db *DB) UpdateGraphMessage(ctx context.Context, monitorID int64, messageID int, weekStart time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET graph_message_id = $2, graph_week_start = $3 WHERE id = $1
+	`, monitorID, messageID, weekStart)
+	return err
+}
+
 // DeleteMonitor removes a monitor from the database.
 // CASCADE will automatically delete associated status_events.
 func (db *DB) DeleteMonitor(ctx context.Context, id int64) error {
@@ -436,6 +321,45 @@ func (db *DB) DeleteMonitor(ctx context.Context, id int64) error {
 	`, id)
 	return err
 }
+
+// ── Status event queries ─────────────────────────────────────────────
+
+// GetLastEventBefore returns the most recent status event strictly before the given time.
+// Returns nil, nil if no such event exists.
+func (db *DB) GetLastEventBefore(ctx context.Context, monitorID int64, before time.Time) (*models.StatusEvent, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+statusEventColumns+` FROM status_events
+		WHERE monitor_id = $1 AND timestamp < $2
+		ORDER BY timestamp DESC
+		LIMIT 1
+	`, monitorID, before)
+	if err != nil {
+		return nil, err
+	}
+	events, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.StatusEvent])
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, nil
+	}
+	return events[0], nil
+}
+
+// GetStatusHistory returns status events for a monitor within a time range.
+func (db *DB) GetStatusHistory(ctx context.Context, monitorID int64, from, to time.Time) ([]*models.StatusEvent, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+statusEventColumns+` FROM status_events
+		WHERE monitor_id = $1 AND timestamp >= $2 AND timestamp <= $3
+		ORDER BY timestamp ASC
+	`, monitorID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.StatusEvent])
+}
+
+// ── Other queries ────────────────────────────────────────────────────
 
 // GetOwnerTelegramIDByMonitorID returns the Telegram ID of the monitor's owner.
 func (db *DB) GetOwnerTelegramIDByMonitorID(ctx context.Context, monitorID int64) (int64, error) {

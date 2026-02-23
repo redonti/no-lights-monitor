@@ -230,8 +230,9 @@ const (
 	msgInfoDetailTypePing = "<b>🌐 Тип:</b> %s\n"
 	msgInfoDetailTarget   = "<b>🎯 Ціль:</b> <code>%s</code>\n\n"
 	msgInfoDetailTypeHB   = "<b>📡 Тип:</b> %s\n"
-	msgInfoDetailURLLabel = "<b>🔗 URL для пінгу:</b>\n"
-	msgInfoDetailURL      = "<code>%s/api/ping/%s</code>\n\n"
+	msgInfoDetailURLLabel  = "<b>🔗 URL для пінгу:</b>\n"
+	msgInfoDetailURL       = "<code>%s/api/ping/%s</code>\n\n"
+	msgInfoDetailSettings  = "⚙️ <b>Налаштування:</b>\n%s/settings/%s\n\n"
 )
 
 // ── Buttons ───────────────────────────────────────────────────────────

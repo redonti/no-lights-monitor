@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Налаштування — No-Lights Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-stone-100 text-stone-900 leading-relaxed">
+
+  <header class="bg-white border-b border-stone-200 py-3.5">
+    <div class="max-w-2xl mx-auto px-5 flex items-center justify-between">
+      <a href="/" class="text-base font-semibold text-stone-900 no-underline">No-Lights Monitor</a>
+      <span class="text-stone-400 text-sm">Налаштування</span>
+    </div>
+  </header>
+
+  <!-- Loading -->
+  <div id="loading" class="max-w-2xl mx-auto px-5 pt-16 text-center text-stone-400">
+    Завантаження...
+  </div>
+
+  <!-- Not found -->
+  <div id="not-found" class="hidden max-w-2xl mx-auto px-5 pt-16 text-center">
+    <p class="text-stone-500 text-lg">Монітор не знайдено</p>
+    <p class="text-stone-400 text-sm mt-2">Перевірте посилання або зверніться до бота.</p>
+  </div>
+
+  <!-- Deleted -->
+  <div id="deleted" class="hidden max-w-2xl mx-auto px-5 pt-16 text-center">
+    <p class="text-stone-500 text-lg">Монітор видалено</p>
+    <p class="text-stone-400 text-sm mt-2">Цей монітор було видалено назавжди.</p>
+  </div>
+
+  <!-- Main content -->
+  <section id="content" class="hidden pt-8 pb-14 max-sm:pt-6 max-sm:pb-9">
+    <div class="max-w-2xl mx-auto px-5">
+
+      <!-- Status bar -->
+      <div class="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h1 id="monitor-name-display" class="text-xl font-bold tracking-tight"></h1>
+          <span id="status-badge" class="inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full"></span>
+        </div>
+        <div class="text-sm text-stone-500 space-y-1">
+          <p id="monitor-type-display"></p>
+          <p id="monitor-address-display"></p>
+          <p id="monitor-channel-display"></p>
+          <p id="monitor-duration-display"></p>
+        </div>
+      </div>
+
+      <!-- Edit form -->
+      <div class="bg-white border border-stone-200 rounded-xl p-5 mb-6">
+        <h2 class="text-lg font-semibold mb-4">Редагування</h2>
+
+        <!-- Name -->
+        <div class="mb-5">
+          <label class="block text-sm font-medium text-stone-700 mb-1.5">Назва</label>
+          <div class="flex gap-2">
+            <input id="input-name" type="text" class="flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400" />
+            <button onclick="saveName()" class="bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors">Зберегти</button>
+          </div>
+        </div>
+
+        <!-- Address -->
+        <div class="mb-5">
+          <label class="block text-sm font-medium text-stone-700 mb-1.5">Адреса</label>
+          <div class="flex gap-2">
+            <input id="input-address" type="text" class="flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400" placeholder="Київ, вул. Хрещатик 1" />
+            <button onclick="saveAddress()" class="bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors">Зберегти</button>
+          </div>
+          <p class="text-xs text-stone-400 mt-1">Адресу буде геокодовано автоматично.</p>
+        </div>
+
+        <!-- Toggles -->
+        <div class="space-y-3 mb-5">
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-sm text-stone-700">Показувати на публічній карті</span>
+            <input id="toggle-public" type="checkbox" onchange="saveToggle('is_public', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-sm text-stone-700">Показувати адресу в сповіщеннях</span>
+            <input id="toggle-notify-address" type="checkbox" onchange="saveToggle('notify_address', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-sm text-stone-700">Показувати графік відключень в сповіщеннях</span>
+            <input id="toggle-notify-outage" type="checkbox" onchange="saveToggle('notify_outage', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+          </label>
+        </div>
+
+        <!-- Outage group -->
+        <div class="mb-2">
+          <label class="block text-sm font-medium text-stone-700 mb-1.5">Група відключень</label>
+          <div class="flex gap-2">
+            <select id="select-region" onchange="loadGroups()" class="border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400">
+              <option value="">Оберіть регіон</option>
+            </select>
+            <select id="select-group" class="flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400">
+              <option value="">Оберіть групу</option>
+            </select>
+            <button onclick="saveOutageGroup()" class="bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors">Зберегти</button>
+          </div>
+          <p id="outage-current" class="text-xs text-stone-400 mt-1"></p>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="bg-white border border-stone-200 rounded-xl p-5">
+        <h2 class="text-lg font-semibold mb-4">Дії</h2>
+        <div class="flex flex-wrap gap-3">
+          <button id="btn-stop" onclick="stopMonitor()" class="bg-amber-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-amber-600 transition-colors">
+            Призупинити моніторинг
+          </button>
+          <button id="btn-resume" onclick="resumeMonitor()" class="hidden bg-green-600 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-green-700 transition-colors">
+            Відновити моніторинг
+          </button>
+          <button id="btn-delete" onclick="confirmDelete()" class="bg-red-600 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-red-700 transition-colors">
+            Видалити монітор
+          </button>
+        </div>
+      </div>
+
+      <!-- Toast -->
+      <div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-sm px-5 py-2.5 rounded-xl shadow-lg z-50 transition-opacity"></div>
+
+      <!-- Delete confirm modal -->
+      <div id="delete-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-5">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl">
+          <h3 class="text-lg font-semibold mb-2">Видалити монітор?</h3>
+          <p class="text-sm text-stone-500 mb-5">Ця дія незворотна. Всі дані про історію статусу будуть втрачені.</p>
+          <div class="flex gap-3 justify-end">
+            <button onclick="closeDeleteModal()" class="text-sm font-medium px-4 py-2 rounded-lg border border-stone-300 hover:bg-stone-50 transition-colors">Скасувати</button>
+            <button onclick="deleteMonitor()" class="bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">Видалити</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <script>
+    const token = window.location.pathname.split('/').pop();
+    const API = '/api/settings/' + token;
+    let monitor = null;
+
+    function showToast(msg, duration = 2500) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      el.style.opacity = '1';
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.classList.add('hidden'), 300);
+      }, duration);
+    }
+
+    function render(m) {
+      monitor = m;
+
+      // Header info
+      document.getElementById('monitor-name-display').textContent = m.name;
+      const badge = document.getElementById('status-badge');
+      if (!m.is_active) {
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-stone-400"></span> Призупинено';
+        badge.className = 'inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full bg-stone-100 text-stone-500';
+      } else if (m.is_online) {
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Онлайн';
+        badge.className = 'inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-700';
+      } else {
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> Офлайн';
+        badge.className = 'inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-700';
+      }
+
+      const typeLabel = m.monitor_type === 'ping' ? 'Server Ping' : 'ESP Heartbeat';
+      document.getElementById('monitor-type-display').textContent = 'Тип: ' + typeLabel + (m.ping_target ? ' (' + m.ping_target + ')' : '');
+      document.getElementById('monitor-address-display').textContent = 'Адреса: ' + m.address;
+      document.getElementById('monitor-channel-display').textContent = m.channel_name ? 'Канал: @' + m.channel_name : '';
+      document.getElementById('monitor-duration-display').textContent = 'У поточному статусі: ' + m.status_duration;
+
+      // Form values
+      document.getElementById('input-name').value = m.name;
+      document.getElementById('input-address').value = m.address;
+      document.getElementById('toggle-public').checked = m.is_public;
+      document.getElementById('toggle-notify-address').checked = m.notify_address;
+      document.getElementById('toggle-notify-outage').checked = m.notify_outage;
+
+      // Outage display
+      if (m.outage_group) {
+        document.getElementById('outage-current').textContent = 'Поточна група: ' + m.outage_group + ' (' + m.outage_region + ')';
+      } else {
+        document.getElementById('outage-current').textContent = 'Група не встановлена';
+      }
+
+      // Stop/Resume buttons
+      if (m.is_active) {
+        document.getElementById('btn-stop').classList.remove('hidden');
+        document.getElementById('btn-resume').classList.add('hidden');
+      } else {
+        document.getElementById('btn-stop').classList.add('hidden');
+        document.getElementById('btn-resume').classList.remove('hidden');
+      }
+
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+    }
+
+    async function load() {
+      try {
+        const res = await fetch(API);
+        if (res.status === 404) {
+          document.getElementById('loading').classList.add('hidden');
+          document.getElementById('not-found').classList.remove('hidden');
+          return;
+        }
+        const data = await res.json();
+        render(data);
+        loadRegions();
+      } catch (e) {
+        document.getElementById('loading').textContent = 'Помилка завантаження.';
+      }
+    }
+
+    async function saveName() {
+      const name = document.getElementById('input-name').value.trim();
+      if (name.length < 2) { showToast('Назва занадто коротка'); return; }
+      try {
+        const res = await fetch(API, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        if (res.ok) {
+          showToast('Назву оновлено');
+          reload();
+        } else {
+          showToast('Помилка збереження');
+        }
+      } catch (e) { showToast('Помилка збереження'); }
+    }
+
+    async function saveAddress() {
+      const address = document.getElementById('input-address').value.trim();
+      if (address.length < 3) { showToast('Адреса занадто коротка'); return; }
+      showToast('Шукаю адресу...', 5000);
+      try {
+        const res = await fetch(API, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address })
+        });
+        if (res.ok) {
+          showToast('Адресу оновлено');
+          reload();
+        } else {
+          showToast('Помилка збереження');
+        }
+      } catch (e) { showToast('Помилка збереження'); }
+    }
+
+    async function saveToggle(field, value) {
+      try {
+        const res = await fetch(API, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [field]: value })
+        });
+        if (res.ok) {
+          showToast('Збережено');
+        } else {
+          showToast('Помилка збереження');
+        }
+      } catch (e) { showToast('Помилка збереження'); }
+    }
+
+    async function loadRegions() {
+      try {
+        const res = await fetch('/api/outage/regions');
+        if (!res.ok) return;
+        const regions = await res.json();
+        const sel = document.getElementById('select-region');
+        sel.innerHTML = '<option value="">Оберіть регіон</option>';
+        regions.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.region_id;
+          opt.textContent = r.region_id;
+          if (monitor && r.region_id === monitor.outage_region) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        if (monitor && monitor.outage_region) loadGroups();
+      } catch (e) {}
+    }
+
+    async function loadGroups() {
+      const region = document.getElementById('select-region').value;
+      const sel = document.getElementById('select-group');
+      sel.innerHTML = '<option value="">Оберіть групу</option>';
+      if (!region) return;
+      try {
+        const res = await fetch('/api/outage/' + region + '/groups');
+        if (!res.ok) return;
+        const data = await res.json();
+        data.groups.forEach(g => {
+          const opt = document.createElement('option');
+          opt.value = g.id;
+          opt.textContent = g.name;
+          if (monitor && g.id === monitor.outage_group) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      } catch (e) {}
+    }
+
+    async function saveOutageGroup() {
+      const region = document.getElementById('select-region').value;
+      const group = document.getElementById('select-group').value;
+      if (!region || !group) { showToast('Оберіть регіон та групу'); return; }
+      try {
+        const res = await fetch(API, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ outage_region: region, outage_group: group })
+        });
+        if (res.ok) {
+          showToast('Групу відключень оновлено');
+          reload();
+        } else {
+          showToast('Помилка збереження');
+        }
+      } catch (e) { showToast('Помилка збереження'); }
+    }
+
+    async function stopMonitor() {
+      try {
+        const res = await fetch(API + '/stop', { method: 'POST' });
+        if (res.ok) {
+          showToast('Моніторинг призупинено');
+          reload();
+        } else {
+          showToast('Помилка');
+        }
+      } catch (e) { showToast('Помилка'); }
+    }
+
+    async function resumeMonitor() {
+      try {
+        const res = await fetch(API + '/resume', { method: 'POST' });
+        if (res.ok) {
+          showToast('Моніторинг відновлено');
+          reload();
+        } else {
+          showToast('Помилка');
+        }
+      } catch (e) { showToast('Помилка'); }
+    }
+
+    function confirmDelete() {
+      document.getElementById('delete-modal').classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+      document.getElementById('delete-modal').classList.add('hidden');
+    }
+
+    async function deleteMonitor() {
+      closeDeleteModal();
+      try {
+        const res = await fetch(API, { method: 'DELETE' });
+        if (res.ok) {
+          document.getElementById('content').classList.add('hidden');
+          document.getElementById('deleted').classList.remove('hidden');
+        } else {
+          showToast('Помилка видалення');
+        }
+      } catch (e) { showToast('Помилка видалення'); }
+    }
+
+    async function reload() {
+      try {
+        const res = await fetch(API);
+        if (res.ok) render(await res.json());
+      } catch (e) {}
+    }
+
+    load();
+  </script>
+
+</body>
+</html>

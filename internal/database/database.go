@@ -16,14 +16,14 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	channel_id, channel_name, monitor_type, ping_target,
 	is_online, is_active, is_public, notify_address,
 	outage_region, outage_group, notify_outage,
-	last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, created_at`
+	last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start, settings_token, created_at`
 
 // monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
 const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
 	m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
 	m.is_online, m.is_active, m.is_public, m.notify_address,
 	m.outage_region, m.outage_group, m.notify_outage,
-	m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.created_at`
+	m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.settings_token, m.created_at`
 
 const userColumns = `id, telegram_id, username, first_name, created_at`
 
@@ -87,8 +87,12 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_region TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_group TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_outage BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_token UUID UNIQUE DEFAULT gen_random_uuid();
+	UPDATE monitors SET settings_token = gen_random_uuid() WHERE settings_token IS NULL;
+	ALTER TABLE monitors ALTER COLUMN settings_token SET NOT NULL;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
+	CREATE INDEX IF NOT EXISTS idx_monitors_settings_token ON monitors(settings_token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_user_id ON monitors(user_id);
 
 	CREATE TABLE IF NOT EXISTS status_events (
@@ -156,6 +160,17 @@ func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Moni
 	rows, err := db.Pool.Query(ctx, `
 		SELECT `+monitorColumns+` FROM monitors WHERE token = $1
 	`, token)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetMonitorBySettingsToken returns a monitor by its unique settings token.
+func (db *DB) GetMonitorBySettingsToken(ctx context.Context, settingsToken string) (*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors WHERE settings_token = $1
+	`, settingsToken)
 	if err != nil {
 		return nil, err
 	}

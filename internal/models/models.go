@@ -33,6 +33,7 @@ type Monitor struct {
 	LastStatusChangeAt time.Time  `json:"last_status_change_at" db:"last_status_change_at"`
 	GraphMessageID     int        `json:"graph_message_id" db:"graph_message_id"`
 	GraphWeekStart     *time.Time `json:"graph_week_start,omitempty" db:"graph_week_start"`
+	SettingsToken      string     `json:"settings_token" db:"settings_token"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 }
 

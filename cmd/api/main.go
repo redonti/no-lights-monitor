@@ -63,6 +63,13 @@ func main() {
 	api.Get("/ping/:token", h.PingAPI)
 	api.Get("/monitors", h.GetMonitors)
 
+	// Settings API (accessed by settings_token)
+	api.Get("/settings/:token", h.GetSettings)
+	api.Put("/settings/:token", h.UpdateSettings)
+	api.Post("/settings/:token/stop", h.StopMonitor)
+	api.Post("/settings/:token/resume", h.ResumeMonitor)
+	api.Delete("/settings/:token", h.DeleteMonitorWeb)
+
 	// Admin routes (protected by HTTP Basic Auth)
 	if cfg.AdminLogin != "" && cfg.AdminPassword != "" {
 		admin := app.Group("/admin", handlers.BasicAuth(cfg.AdminLogin, cfg.AdminPassword))
@@ -71,6 +78,11 @@ func main() {
 		admin.Get("/api/monitors", h.AdminGetMonitors)
 		admin.Get("/api/monitors/:id/history", h.GetHistory)
 	}
+
+	// Settings page (serve settings.html for any /settings/* path).
+	app.Get("/settings/:token", func(c *fiber.Ctx) error {
+		return c.SendFile("./web/settings.html")
+	})
 
 	// Serve static frontend files
 	app.Static("/", "./web")

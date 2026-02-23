@@ -181,6 +181,9 @@ func (b *Bot) onCallbackInfo(ctx context.Context, c tele.Context, m *models.Moni
 		bld.WriteString(msgInfoHeartbeatHint)
 	}
 
+	bld.WriteString("\n")
+	bld.WriteString(fmt.Sprintf(msgInfoDetailSettings, b.baseURL, m.SettingsToken))
+
 	mapBtn := tele.InlineButton{
 		Text: msgMapBtnHide,
 		Data: fmt.Sprintf("map_hide:%d", m.ID),

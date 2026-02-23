@@ -17,7 +17,7 @@ import (
 
 // Notifier sends Telegram messages on status changes.
 type Notifier interface {
-	NotifyStatusChange(monitorID, channelID int64, name string, isOnline bool, duration time.Duration, when time.Time)
+	NotifyStatusChange(monitorID, channelID int64, name, address string, notifyAddress, isOnline bool, duration time.Duration, when time.Time)
 }
 
 // monitorInfo is the in-memory representation used for fast ping lookups.
@@ -30,8 +30,9 @@ type monitorInfo struct {
 	Longitude   float64
 	MonitorType string // "heartbeat" or "ping"
 	PingTarget  string // IP/hostname for ping monitors
-	IsOnline    bool
-	IsActive    bool // whether monitoring is enabled
+	IsOnline       bool
+	IsActive       bool // whether monitoring is enabled
+	NotifyAddress  bool
 	LastChange  time.Time
 	mu          sync.Mutex
 }
@@ -81,9 +82,10 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 			Longitude:   m.Longitude,
 			MonitorType: m.MonitorType,
 			PingTarget:  m.PingTarget,
-			IsOnline:    m.IsOnline,
-			IsActive:    m.IsActive,
-			LastChange:  m.LastStatusChangeAt,
+			IsOnline:      m.IsOnline,
+			IsActive:      m.IsActive,
+			NotifyAddress: m.NotifyAddress,
+			LastChange:    m.LastStatusChangeAt,
 		})
 	}
 	log.Printf("[heartbeat] loaded %d monitors into memory (grace period: %s)", len(monitors), s.threshold)
@@ -101,9 +103,10 @@ func (s *Service) RegisterMonitor(m *models.Monitor) {
 		Longitude:   m.Longitude,
 		MonitorType: m.MonitorType,
 		PingTarget:  m.PingTarget,
-		IsOnline:    false,
-		IsActive:    m.IsActive,
-		LastChange:  m.LastStatusChangeAt,
+		IsOnline:      false,
+		IsActive:      m.IsActive,
+		NotifyAddress: m.NotifyAddress,
+		LastChange:    m.LastStatusChangeAt,
 	})
 }
 
@@ -117,6 +120,20 @@ func (s *Service) SetMonitorActive(token string, isActive bool) bool {
 	info := val.(*monitorInfo)
 	info.mu.Lock()
 	info.IsActive = isActive
+	info.mu.Unlock()
+	return true
+}
+
+// SetMonitorNotifyAddress updates the notify_address flag of a monitor in memory.
+// Returns true if the monitor was found.
+func (s *Service) SetMonitorNotifyAddress(token string, notifyAddress bool) bool {
+	val, ok := s.monitors.Load(token)
+	if !ok {
+		return false
+	}
+	info := val.(*monitorInfo)
+	info.mu.Lock()
+	info.NotifyAddress = notifyAddress
 	info.mu.Unlock()
 	return true
 }
@@ -246,6 +263,8 @@ func (s *Service) checkAll(ctx context.Context) {
 
 		// Capture values for async operations.
 		monitorName := info.Name
+		monitorAddress := info.Address
+		notifyAddress := info.NotifyAddress
 		channelID := info.ChannelID
 		info.mu.Unlock()
 
@@ -262,7 +281,7 @@ func (s *Service) checkAll(ctx context.Context) {
 				if (!isNowOnline){
 					when = now.Add(-s.threshold)
 				}
-				go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, isNowOnline, duration, when)
+				go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, monitorAddress, notifyAddress, isNowOnline, duration, when)
 			}
 
 			if isNowOnline {

@@ -38,7 +38,7 @@ func scanMonitor(scanner interface {
 		&m.ID, &m.UserID, &m.Token, &m.Name, &m.Address,
 		&m.Latitude, &m.Longitude, &m.ChannelID, &m.ChannelName,
 		&m.MonitorType, &m.PingTarget,
-		&m.IsOnline, &m.IsActive, &m.IsPublic, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
+		&m.IsOnline, &m.IsActive, &m.IsPublic, &m.NotifyAddress, &m.LastHeartbeatAt, &m.LastStatusChangeAt,
 		&m.GraphMessageID, &m.GraphWeekStart, &m.CreatedAt,
 	)
 }
@@ -78,6 +78,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS monitor_type TEXT NOT NULL DEFAULT 'heartbeat';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS ping_target TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT TRUE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_address BOOLEAN NOT NULL DEFAULT TRUE;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_user_id ON monitors(user_id);
@@ -141,7 +142,7 @@ func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address str
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, user_id, token, name, address, latitude, longitude,
 		          channel_id, channel_name, monitor_type, ping_target,
-		          is_online, is_active, is_public, last_heartbeat_at,
+		          is_online, is_active, is_public, notify_address, last_heartbeat_at,
 		          last_status_change_at, graph_message_id, graph_week_start, created_at
 	`, userID, name, address, lat, lng, channelID, channelName, monitorType, pingTarget)
 	err := scanMonitor(row, &m)
@@ -157,7 +158,7 @@ func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Moni
 	row := db.Pool.QueryRow(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, last_heartbeat_at,
+		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors WHERE token = $1
 	`, token)
@@ -173,7 +174,7 @@ func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]
 	rows, err := db.Pool.Query(ctx, `
 		SELECT m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
 		       m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
-		       m.is_online, m.is_active, m.is_public, m.last_heartbeat_at,
+		       m.is_online, m.is_active, m.is_public, m.notify_address, m.last_heartbeat_at,
 		       m.last_status_change_at, m.graph_message_id, m.graph_week_start, m.created_at
 		FROM monitors m
 		JOIN users u ON u.id = m.user_id
@@ -201,7 +202,7 @@ func (db *DB) GetPublicMonitors(ctx context.Context) ([]*models.Monitor, error) 
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, last_heartbeat_at,
+		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors WHERE is_public = TRUE AND is_active = TRUE ORDER BY id
 	`)
@@ -226,7 +227,7 @@ func (db *DB) GetAllMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, last_heartbeat_at,
+		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors ORDER BY id
 	`)
@@ -322,7 +323,7 @@ func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, e
 	rows, err := db.Pool.Query(ctx, `
 		SELECT id, user_id, token, name, address, latitude, longitude,
 		       channel_id, channel_name, monitor_type, ping_target,
-		       is_online, is_active, is_public, last_heartbeat_at,
+		       is_online, is_active, is_public, notify_address, last_heartbeat_at,
 		       last_status_change_at, graph_message_id, graph_week_start, created_at
 		FROM monitors
 		WHERE channel_id IS NOT NULL AND channel_id != 0 AND is_active = TRUE
@@ -365,6 +366,14 @@ func (db *DB) SetMonitorPublic(ctx context.Context, id int64, isPublic bool) err
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE monitors SET is_public = $2 WHERE id = $1
 	`, id, isPublic)
+	return err
+}
+
+// SetMonitorNotifyAddress toggles whether the address is shown in notifications.
+func (db *DB) SetMonitorNotifyAddress(ctx context.Context, id int64, notifyAddress bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET notify_address = $2 WHERE id = $1
+	`, id, notifyAddress)
 	return err
 }
 

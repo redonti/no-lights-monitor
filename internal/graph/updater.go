@@ -78,11 +78,11 @@ func (u *Updater) UpdateSingle(ctx context.Context, monitorID, channelID int64) 
 	}
 	for _, m := range monitors {
 		if m.ID == monitorID {
-			return u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.GraphMessageID, m.GraphWeekStart, weekStart, now)
+			return u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.Address, m.NotifyAddress, m.GraphMessageID, m.GraphWeekStart, weekStart, now)
 		}
 	}
 	// Monitor just created, no graph yet.
-	return u.updateOne(ctx, monitorID, channelID, "", 0, nil, weekStart, now)
+	return u.updateOne(ctx, monitorID, channelID, "", "", false, 0, nil, weekStart, now)
 }
 
 // runAll iterates over every monitor with a channel and updates its graph.
@@ -98,7 +98,7 @@ func (u *Updater) runAll(ctx context.Context) {
 	weekStart := currentWeekStart(now)
 
 	for _, m := range monitors {
-		if err := u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.GraphMessageID, m.GraphWeekStart, weekStart, now); err != nil {
+		if err := u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.Address, m.NotifyAddress, m.GraphMessageID, m.GraphWeekStart, weekStart, now); err != nil {
 			log.Printf("[graph] monitor %d: %v", m.ID, err)
 		}
 	}
@@ -117,9 +117,14 @@ func (u *Updater) handleChannelError(ctx context.Context, monitorID int64, monit
 }
 
 // updateOne generates a graph PNG and sends or edits it in the channel.
-func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, monitorName string, oldMsgID int, oldWeekStart *time.Time, weekStart, now time.Time) error {
+func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, monitorName, monitorAddress string, notifyAddress bool, oldMsgID int, oldWeekStart *time.Time, weekStart, now time.Time) error {
 	// Determine if we need a new message (new week or first graph).
 	needsNewMessage := oldMsgID == 0 || oldWeekStart == nil || !oldWeekStart.Equal(weekStart)
+
+	caption := fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006"))
+	if notifyAddress && monitorAddress != "" {
+		caption += fmt.Sprintf("\n📍 %s", monitorAddress)
+	}
 
 	// Fetch week events.
 	events, err := u.db.GetStatusHistory(ctx, monitorID, weekStart, now)
@@ -150,7 +155,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, mon
 		// Send a brand-new photo message.
 		photo := &tele.Photo{
 			File:    tele.FromReader(pngReader(png)),
-			Caption: fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006")),
+			Caption: caption,
 		}
 		sent, err := u.bot.Send(chat, photo, silent)
 		if err != nil {
@@ -168,7 +173,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, mon
 		// Edit the existing photo in-place.
 		editPhoto := &tele.Photo{
 			File:    tele.FromReader(pngReader(png)),
-			Caption: fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006")),
+			Caption: caption,
 		}
 		editMsg := &tele.Message{
 			ID:   oldMsgID,
@@ -189,7 +194,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, mon
 			log.Printf("[graph] monitor %d: edit failed (%v), sending new message", monitorID, err)
 			fallbackPhoto := &tele.Photo{
 				File:    tele.FromReader(pngReader(png)),
-				Caption: fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006")),
+				Caption: caption,
 			}
 			sent, sendErr := u.bot.Send(chat, fallbackPhoto, silent)
 			if sendErr != nil {

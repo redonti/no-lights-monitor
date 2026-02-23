@@ -386,9 +386,14 @@ func (b *Bot) handleCallback(c tele.Context) error {
 
 	case "edit":
 		_ = c.Respond(&tele.CallbackResponse{})
+		addrBtnText := msgEditBtnHideAddress
+		if !targetMonitor.NotifyAddress {
+			addrBtnText = msgEditBtnShowAddress
+		}
 		rows := [][]tele.InlineButton{
 			{{Text: msgEditBtnName, Data: fmt.Sprintf("edit_name:%d", monitorID)}},
 			{{Text: msgEditBtnAddress, Data: fmt.Sprintf("edit_address:%d", monitorID)}},
+			{{Text: addrBtnText, Data: fmt.Sprintf("edit_notify_address:%d", monitorID)}},
 		}
 		if targetMonitor.ChannelID != 0 {
 			rows = append(rows, []tele.InlineButton{
@@ -434,6 +439,21 @@ func (b *Bot) handleCallback(c tele.Context) error {
 			return c.Send(msgError, htmlOpts)
 		}
 		return c.Send(fmt.Sprintf(msgEditChannelRefreshDone, newName), htmlOpts)
+
+	case "edit_notify_address":
+		newVal := !targetMonitor.NotifyAddress
+		if err := b.db.SetMonitorNotifyAddress(ctx, monitorID, newVal); err != nil {
+			log.Printf("[bot] set notify_address error: %v", err)
+			return c.Respond(&tele.CallbackResponse{Text: msgNotifyAddressError})
+		}
+		// Update in-memory state in heartbeat service.
+		b.heartbeatSvc.SetMonitorNotifyAddress(targetMonitor.Token, newVal)
+		msg := msgNotifyAddressEnabled
+		if !newVal {
+			msg = msgNotifyAddressDisabled
+		}
+		_ = c.Respond(&tele.CallbackResponse{Text: msg})
+		return c.Send(msg)
 
 	case "map_hide":
 		if err := b.db.SetMonitorPublic(ctx, monitorID, false); err != nil {
@@ -1094,7 +1114,7 @@ func NewNotifier(b *tele.Bot, db *database.DB) *TelegramNotifier {
 
 // NotifyStatusChange sends a status message to the linked Telegram channel.
 // On channel access errors the monitor is paused and the owner is notified via DM.
-func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name string, isOnline bool, duration time.Duration, when time.Time) {
+func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name, address string, notifyAddress, isOnline bool, duration time.Duration, when time.Time) {
 	var msg string
 	dur := database.FormatDuration(duration)
 	kyiv, _ := time.LoadLocation("Europe/Kyiv")
@@ -1104,6 +1124,10 @@ func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name s
 		msg = fmt.Sprintf(msgNotifyOnline, timeStr, dur)
 	} else {
 		msg = fmt.Sprintf(msgNotifyOffline, timeStr, dur)
+	}
+
+	if notifyAddress && address != "" {
+		msg += fmt.Sprintf(msgNotifyAddressLine, html.EscapeString(address))
 	}
 
 	chat := &tele.Chat{ID: channelID}

@@ -237,11 +237,19 @@ const (
 // ── Buttons ───────────────────────────────────────────────────────────
 
 const (
-	msgEditBtnName           = "✏️ Змінити назву"
-	msgEditBtnAddress        = "📍 Змінити адресу"
-	msgEditBtnRefreshChannel = "🔄 Оновити тег каналу"
-	msgMapBtnHide            = "🗺 Прибрати з карти"
-	msgMapBtnShow            = "🗺 Додати на карту"
+	msgEditBtnName            = "✏️ Змінити назву"
+	msgEditBtnAddress         = "📍 Змінити адресу"
+	msgEditBtnRefreshChannel  = "🔄 Оновити тег каналу"
+	msgEditBtnShowAddress     = "📍 Показувати адресу в сповіщеннях"
+	msgEditBtnHideAddress     = "📍 Приховати адресу в сповіщеннях"
+	msgMapBtnHide             = "🗺 Прибрати з карти"
+	msgMapBtnShow             = "🗺 Додати на карту"
+)
+
+const (
+	msgNotifyAddressEnabled  = "✅ Адресу буде показано в сповіщеннях."
+	msgNotifyAddressDisabled = "✅ Адресу приховано зі сповіщень."
+	msgNotifyAddressError    = "Помилка зміни налаштування."
 )
 
 const (
@@ -314,8 +322,9 @@ const msgCreateDoneHeartbeat = `<b>Монітор налаштовано!</b>
 // ── Notifications ───────────────────────────────────────────────────
 
 const (
-	msgNotifyOnline  = "🟢 <b>%s Світло з'явилося</b> \n<i>(не було %s)</i>"
-	msgNotifyOffline = "🔴 <b>%s Світла немає</b>\n<i>(воно було %s)</i>"
+	msgNotifyOnline      = "🟢 <b>%s Світло з'явилося</b> \n<i>(не було %s)</i>"
+	msgNotifyOffline     = "🔴 <b>%s Світла немає</b>\n<i>(воно було %s)</i>"
+	msgNotifyAddressLine = "\n📍 <i>%s</i>"
 )
 
 // ── Channel access errors ────────────────────────────────────────────

@@ -121,6 +121,25 @@ services:
       options:
         tag: nolights-worker
 
+  # Outage Service - Fetches and serves power outage schedule data (internal only)
+  outage:
+    image: ghcr.io/redonti/no-lights-monitor/outage:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.outage
+    container_name: nolights-outage
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      TZ: Europe/Kyiv
+      OUTAGE_PORT: 8090
+      OUTAGE_FETCH_INTERVAL: ${OUTAGE_FETCH_INTERVAL:-900}
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-outage
+
 volumes:
   pgdata:
   redisdata:

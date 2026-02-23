@@ -10,19 +10,22 @@ const (
 	DefaultPingIntervalSec = 300
 	// DefaultOfflineThresholdSec is seconds without ping before marking monitor offline.
 	DefaultOfflineThresholdSec = 300
+	// DefaultOutageFetchIntervalSec is seconds between outage data fetches from GitHub.
+	DefaultOutageFetchIntervalSec = 900
 )
 
 type Config struct {
-	Port             string
-	DatabaseURL      string
-	RedisURL         string
-	BotToken         string
-	BaseURL          string
-	GraphServiceURL  string
-	PingInterval     int // expected seconds between pings
-	OfflineThreshold int // seconds without ping before marking offline
-	AdminLogin       string
-	AdminPassword    string
+	Port                string
+	DatabaseURL         string
+	RedisURL            string
+	BotToken            string
+	BaseURL             string
+	GraphServiceURL     string
+	PingInterval        int // expected seconds between pings
+	OfflineThreshold    int // seconds without ping before marking offline
+	AdminLogin          string
+	AdminPassword       string
+	OutageFetchInterval int // seconds between outage data fetches
 }
 
 func Load() *Config {
@@ -35,8 +38,9 @@ func Load() *Config {
 		GraphServiceURL:  getEnv("GRAPH_SERVICE_URL", "http://localhost:8000"),
 		PingInterval:     getEnvInt("PING_INTERVAL", DefaultPingIntervalSec),
 		OfflineThreshold: getEnvInt("OFFLINE_THRESHOLD", DefaultOfflineThresholdSec),
-		AdminLogin:       getEnv("ADMIN_LOGIN", ""),
-		AdminPassword:    getEnv("ADMIN_PASSWORD", ""),
+		AdminLogin:          getEnv("ADMIN_LOGIN", ""),
+		AdminPassword:       getEnv("ADMIN_PASSWORD", ""),
+		OutageFetchInterval: getEnvInt("OUTAGE_FETCH_INTERVAL", DefaultOutageFetchIntervalSec),
 	}
 }
 

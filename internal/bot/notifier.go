@@ -86,13 +86,16 @@ func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, 
 	// unplanned event — the schedule can't predict it, so skip the outage line.
 	// We check both current and next hour to handle threshold drift
 	// (e.g. outage scheduled at 15:00 but power cuts at 14:55).
+	// "first" = off first 30 min, on second 30 min (transitional).
+	// "second" = on first 30 min, off second 30 min (transitional).
+	// Both count as matching either on or off, since status can change mid-hour.
 	isOffHour := func(h int) bool {
 		s := fact.Hours[strconv.Itoa(h+1)]
-		return s == "no" || s == "second"
+		return s == "no" || s == "first" || s == "second"
 	}
 	isOnHour := func(h int) bool {
 		s := fact.Hours[strconv.Itoa(h+1)]
-		return s == "yes" || s == "first"
+		return s == "yes" || s == "first" || s == "second"
 	}
 	nextHour := currentHour + 1
 	if nextHour >= 24 {

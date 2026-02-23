@@ -91,7 +91,7 @@
         const tbody = document.getElementById('monitors-body');
         tbody.innerHTML = monitors.map(m => `
           <tr class="hover:bg-stone-50">
-            <td class="px-4 py-2.5 text-stone-400">${m.id}</td>
+            <td class="px-4 py-2.5 text-stone-400">${m.id} <a href="/settings/${m.settings_token}">link</a></td>
             <td class="px-4 py-2.5 font-medium">${m.name}</td>
             <td class="px-4 py-2.5 text-stone-500">${m.address}</td>
             <td class="px-4 py-2.5">

@@ -26,6 +26,9 @@ jobs:
           - name: graph-service
             dockerfile: graph-service/Dockerfile
             context: ./graph-service
+          - name: outage
+            dockerfile: Dockerfile.outage
+            context: .
     steps:
       - uses: actions/checkout@v4
 

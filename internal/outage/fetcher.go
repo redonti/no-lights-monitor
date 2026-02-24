@@ -56,6 +56,7 @@ func (f *Fetcher) Start(ctx context.Context) {
 }
 
 func (f *Fetcher) fetchAll() {
+	log.Printf("[outage] fetching data for %d regions...", len(supportedRegions))
 	for _, region := range supportedRegions {
 		if err := f.fetchRegion(region); err != nil {
 			log.Printf("[outage] failed to fetch %s: %v", region, err)
@@ -91,11 +92,14 @@ func (f *Fetcher) fetchRegion(region string) error {
 
 	// Skip if data hasn't changed.
 	if existing, ok := f.data[region]; ok && existing.LastUpdated == rd.LastUpdated {
+		log.Printf("[outage] %s unchanged (lastUpdated: %s, factUpdate: %s, today: %d)",
+			region, rd.LastUpdated, rd.Fact.Update, rd.Fact.Today)
 		return nil
 	}
 
 	f.data[region] = &rd
-	log.Printf("[outage] updated %s (lastUpdated: %s)", region, rd.LastUpdated)
+	log.Printf("[outage] updated %s (lastUpdated: %s, factUpdate: %s, today: %d)",
+		region, rd.LastUpdated, rd.Fact.Update, rd.Fact.Today)
 	return nil
 }
 

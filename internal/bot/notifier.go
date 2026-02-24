@@ -82,6 +82,9 @@ func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, 
 	nowKyiv := when.In(kyiv)
 	currentHour := nowKyiv.Hour() // 0-23
 
+	log.Printf("[bot] outage data for %s/%s: factUpdate=%s, date=%s, currentHour=%d, isOnline=%v, hours=%v",
+		region, group, fact.FactUpdate, fact.Date, currentHour, isOnline, fact.Hours)
+
 	// Check if schedule matches actual status. If not, this is likely an
 	// unplanned event — the schedule can't predict it, so skip the outage line.
 	// We check both current and next hour to handle threshold drift
@@ -101,12 +104,14 @@ func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, 
 	if nextHour >= 24 {
 		nextHour = 23
 	}
+	curStatus := fact.Hours[strconv.Itoa(currentHour+1)]
+	nextStatus := fact.Hours[strconv.Itoa(nextHour+1)]
 	if isOnline && !isOnHour(currentHour) && !isOnHour(nextHour) {
-		// Lights came on but schedule says off for both this and next hour — unplanned.
+		log.Printf("[bot] outage skip: lights ON but schedule says off (cur=%q next=%q) — unplanned", curStatus, nextStatus)
 		return ""
 	}
 	if !isOnline && !isOffHour(currentHour) && !isOffHour(nextHour) {
-		// Lights went off but schedule says on for both this and next hour — unplanned.
+		log.Printf("[bot] outage skip: lights OFF but schedule says on (cur=%q next=%q) — unplanned", curStatus, nextStatus)
 		return ""
 	}
 
@@ -114,18 +119,22 @@ func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, 
 		// Find next contiguous outage block, only within today (no wrap-around).
 		start, end := findNextOutageBlock(fact.Hours, currentHour)
 		if start < 0 {
+			log.Printf("[bot] outage: lights ON, no next outage block found today")
 			return ""
 		}
+		log.Printf("[bot] outage: lights ON, next outage block %02d:00-%02d:00", start, end)
 		return fmt.Sprintf(msgOutageNextPlanned, fmt.Sprintf("%02d:00 - %02d:00", start, end))
 	}
 
 	// Lights OFF: find next "yes" hour to estimate restoration (today only).
 	nextOn := findNextOnHour(fact.Hours, currentHour)
 	if nextOn < 0 {
+		log.Printf("[bot] outage: lights OFF, no restoration hour found today")
 		return ""
 	}
 	hoursUntil := nextOn - currentHour
 	durStr := database.FormatDuration(time.Duration(hoursUntil) * time.Hour)
+	log.Printf("[bot] outage: lights OFF, next ON at %02d:00 (in %d hours)", nextOn, hoursUntil)
 	return fmt.Sprintf(msgOutageExpected, durStr, fmt.Sprintf("%02d:00", nextOn))
 }
 

@@ -95,14 +95,6 @@
             <input id="toggle-notify-address" type="checkbox" onchange="saveToggle('notify_address', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
           </label>
           <label class="flex items-center justify-between cursor-pointer">
-            <span class="text-sm text-stone-700">Показувати графік відключень в сповіщеннях</span>
-            <input id="toggle-notify-outage" type="checkbox" onchange="saveToggle('notify_outage', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
-          </label>
-          <label class="flex items-center justify-between cursor-pointer">
-            <span class="text-sm text-stone-700">Публікувати фото графіка відключень в каналі</span>
-            <input id="toggle-outage-photo" type="checkbox" onchange="saveToggle('outage_photo_enabled', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
-          </label>
-          <label class="flex items-center justify-between cursor-pointer">
             <span class="text-sm text-stone-700">Публікувати графік аптайму в каналі</span>
             <input id="toggle-graph" type="checkbox" onchange="saveToggle('graph_enabled', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
           </label>
@@ -121,6 +113,18 @@
             <button onclick="saveOutageGroup()" class="bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors">Зберегти</button>
           </div>
           <p id="outage-current" class="text-xs text-stone-400 mt-1"></p>
+
+          <!-- Outage-dependent toggles (only active when group is set) -->
+          <div id="outage-toggles" class="space-y-3 mt-4">
+            <label class="flex items-center justify-between cursor-pointer">
+              <span id="label-notify-outage" class="text-sm text-stone-700">Показувати графік відключень в сповіщеннях</span>
+              <input id="toggle-notify-outage" type="checkbox" onchange="saveToggle('notify_outage', this.checked)" disabled class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4 disabled:opacity-40 disabled:cursor-not-allowed" />
+            </label>
+            <label class="flex items-center justify-between cursor-pointer">
+              <span id="label-outage-photo" class="text-sm text-stone-700">Публікувати фото графіка відключень в каналі</span>
+              <input id="toggle-outage-photo" type="checkbox" onchange="saveToggle('outage_photo_enabled', this.checked)" disabled class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4 disabled:opacity-40 disabled:cursor-not-allowed" />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -202,9 +206,16 @@
       document.getElementById('input-address').value = m.address;
       document.getElementById('toggle-public').checked = m.is_public;
       document.getElementById('toggle-notify-address').checked = m.notify_address;
-      document.getElementById('toggle-notify-outage').checked = m.notify_outage;
-      document.getElementById('toggle-outage-photo').checked = m.outage_photo_enabled;
       document.getElementById('toggle-graph').checked = m.graph_enabled;
+
+      // Outage-dependent toggles
+      const hasGroup = !!m.outage_group;
+      document.getElementById('toggle-notify-outage').checked = m.notify_outage;
+      document.getElementById('toggle-notify-outage').disabled = !hasGroup;
+      document.getElementById('label-notify-outage').classList.toggle('opacity-40', !hasGroup);
+      document.getElementById('toggle-outage-photo').checked = m.outage_photo_enabled;
+      document.getElementById('toggle-outage-photo').disabled = !hasGroup;
+      document.getElementById('label-outage-photo').classList.toggle('opacity-40', !hasGroup);
 
       // Outage display
       if (m.outage_group) {

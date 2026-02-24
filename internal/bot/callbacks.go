@@ -108,7 +108,7 @@ func (b *Bot) onCallbackStop(ctx context.Context, c tele.Context, m *models.Moni
 		}
 	}
 	_ = c.Respond(&tele.CallbackResponse{Text: msgStopOK})
-	return c.Send(fmt.Sprintf(msgStopDone, msgStopOK, html.EscapeString(m.Name)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgStopDone, msgStopOK, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackResume(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -119,7 +119,7 @@ func (b *Bot) onCallbackResume(ctx context.Context, c tele.Context, m *models.Mo
 		member, err := b.bot.ChatMemberOf(chat, me)
 		if err != nil || (member.Role != tele.Administrator && member.Role != tele.Creator) || !member.Rights.CanPostMessages {
 			_ = c.Respond(&tele.CallbackResponse{Text: msgResumeNoAccess})
-			return c.Send(fmt.Sprintf(msgResumeNoAccessDetail, html.EscapeString(m.ChannelName)), htmlOpts)
+			return c.Edit(fmt.Sprintf(msgResumeNoAccessDetail, html.EscapeString(m.ChannelName)), tele.ModeHTML, &tele.ReplyMarkup{})
 		}
 	}
 	if err := b.db.SetMonitorActive(ctx, m.ID, true); err != nil {
@@ -133,7 +133,7 @@ func (b *Bot) onCallbackResume(ctx context.Context, c tele.Context, m *models.Mo
 		}
 	}
 	_ = c.Respond(&tele.CallbackResponse{Text: msgResumeOK})
-	return c.Send(fmt.Sprintf(msgResumeDone, msgResumeOK, html.EscapeString(m.Name)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgResumeDone, msgResumeOK, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackDelete(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -143,7 +143,7 @@ func (b *Bot) onCallbackDelete(ctx context.Context, c tele.Context, m *models.Mo
 	}
 	b.heartbeatSvc.RemoveMonitor(m.Token)
 	_ = c.Respond(&tele.CallbackResponse{Text: msgDeleteOK})
-	return c.Send(fmt.Sprintf(msgDeleteDone, msgDeleteOK, html.EscapeString(m.Name)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgDeleteDone, msgDeleteOK, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackInfo(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -199,7 +199,7 @@ func (b *Bot) onCallbackInfo(ctx context.Context, c tele.Context, m *models.Moni
 		}
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{{mapBtn}}}
-	return c.Send(bld.String(), htmlOpts, keyboard)
+	return c.Edit(bld.String(), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
@@ -251,7 +251,7 @@ func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
 		}
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Send(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name)), htmlOpts, keyboard)
+	return c.Edit(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name)), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) onCallbackEditName(c tele.Context, m *models.Monitor) error {
@@ -262,7 +262,7 @@ func (b *Bot) onCallbackEditName(c tele.Context, m *models.Monitor) error {
 		EditMonitorID: m.ID,
 	}
 	b.mu.Unlock()
-	return c.Send(fmt.Sprintf(msgEditNamePrompt, html.EscapeString(m.Name)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgEditNamePrompt, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackEditAddress(c tele.Context, m *models.Monitor) error {
@@ -273,7 +273,7 @@ func (b *Bot) onCallbackEditAddress(c tele.Context, m *models.Monitor) error {
 		EditMonitorID: m.ID,
 	}
 	b.mu.Unlock()
-	return c.Send(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(m.Address)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(m.Address)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackEditChannelRefresh(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -281,17 +281,17 @@ func (b *Bot) onCallbackEditChannelRefresh(ctx context.Context, c tele.Context, 
 	chat, err := b.bot.ChatByID(m.ChannelID)
 	if err != nil {
 		log.Printf("[bot] failed to fetch channel info for monitor %d: %v", m.ID, err)
-		return c.Send(msgEditChannelRefreshError, htmlOpts)
+		return c.Edit(msgEditChannelRefreshError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	newName := chat.Username
 	if newName == m.ChannelName {
-		return c.Send(fmt.Sprintf(msgEditChannelRefreshNoChange, newName), htmlOpts)
+		return c.Edit(fmt.Sprintf(msgEditChannelRefreshNoChange, newName), tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	if err := b.db.UpdateMonitorChannelName(ctx, m.ID, newName); err != nil {
 		log.Printf("[bot] failed to update channel name for monitor %d: %v", m.ID, err)
-		return c.Send(msgError, htmlOpts)
+		return c.Edit(msgError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
-	return c.Send(fmt.Sprintf(msgEditChannelRefreshDone, newName), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgEditChannelRefreshDone, newName), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackEditNotifyAddress(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -306,19 +306,18 @@ func (b *Bot) onCallbackEditNotifyAddress(ctx context.Context, c tele.Context, m
 	if !newVal {
 		msg = msgNotifyAddressDisabled
 	}
-	_ = c.Respond(&tele.CallbackResponse{Text: msg})
-	return c.Send(msg)
+	return c.Respond(&tele.CallbackResponse{Text: msg})
 }
 
 func (b *Bot) onCallbackEditOutage(c tele.Context, m *models.Monitor) error {
 	_ = c.Respond(&tele.CallbackResponse{})
 	if b.outageClient == nil {
-		return c.Send(msgOutageGroupError, htmlOpts)
+		return c.Edit(msgOutageGroupError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	regions, err := b.outageClient.GetRegions()
 	if err != nil {
 		log.Printf("[bot] outage get regions error: %v", err)
-		return c.Send(msgOutageGroupError, htmlOpts)
+		return c.Edit(msgOutageGroupError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	var regionRows [][]tele.InlineButton
 	for _, r := range regions {
@@ -327,22 +326,22 @@ func (b *Bot) onCallbackEditOutage(c tele.Context, m *models.Monitor) error {
 		})
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: regionRows}
-	return c.Send(msgOutageRegionPrompt, htmlOpts, keyboard)
+	return c.Edit(msgOutageRegionPrompt, tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) onCallbackOutageRegion(c tele.Context, parts []string, m *models.Monitor) error {
 	_ = c.Respond(&tele.CallbackResponse{})
 	if len(parts) < 3 {
-		return c.Send(msgInvalidFormat, htmlOpts)
+		return c.Edit(msgInvalidFormat, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	region := parts[2]
 	if b.outageClient == nil {
-		return c.Send(msgOutageGroupError, htmlOpts)
+		return c.Edit(msgOutageGroupError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	groups, err := b.outageClient.GetGroups(region)
 	if err != nil {
 		log.Printf("[bot] outage get groups error: %v", err)
-		return c.Send(msgOutageGroupError, htmlOpts)
+		return c.Edit(msgOutageGroupError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	var groupRows [][]tele.InlineButton
 	// Show groups in rows of 3 buttons.
@@ -357,19 +356,19 @@ func (b *Bot) onCallbackOutageRegion(c tele.Context, parts []string, m *models.M
 		groupRows = append(groupRows, row)
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: groupRows}
-	return c.Send(msgOutageGroupPrompt, htmlOpts, keyboard)
+	return c.Edit(msgOutageGroupPrompt, tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) onCallbackOutageGroup(ctx context.Context, c tele.Context, parts []string, m *models.Monitor) error {
 	_ = c.Respond(&tele.CallbackResponse{})
 	if len(parts) < 4 {
-		return c.Send(msgInvalidFormat, htmlOpts)
+		return c.Edit(msgInvalidFormat, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	region := parts[2]
 	group := parts[3]
 	if err := b.db.SetMonitorOutageGroup(ctx, m.ID, region, group); err != nil {
 		log.Printf("[bot] set outage group error: %v", err)
-		return c.Send(msgError, htmlOpts)
+		return c.Edit(msgError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
 	b.heartbeatSvc.SetMonitorOutageGroup(m.Token, region, group)
 	// Auto-enable notify_outage when setting a group.
@@ -377,7 +376,7 @@ func (b *Bot) onCallbackOutageGroup(ctx context.Context, c tele.Context, parts [
 		log.Printf("[bot] set notify_outage error: %v", err)
 	}
 	b.heartbeatSvc.SetMonitorNotifyOutage(m.Token, true)
-	return c.Send(fmt.Sprintf(msgOutageGroupSet, html.EscapeString(group), html.EscapeString(region)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgOutageGroupSet, html.EscapeString(group), html.EscapeString(region)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) onCallbackEditNotifyOutage(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -391,8 +390,7 @@ func (b *Bot) onCallbackEditNotifyOutage(ctx context.Context, c tele.Context, m 
 	if !newVal {
 		msg = msgNotifyOutageDisabled
 	}
-	_ = c.Respond(&tele.CallbackResponse{Text: msg})
-	return c.Send(msg)
+	return c.Respond(&tele.CallbackResponse{Text: msg})
 }
 
 func (b *Bot) onCallbackEditGraph(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -405,8 +403,7 @@ func (b *Bot) onCallbackEditGraph(ctx context.Context, c tele.Context, m *models
 	if !newVal {
 		msg = msgGraphDisabled
 	}
-	_ = c.Respond(&tele.CallbackResponse{Text: msg})
-	return c.Send(msg)
+	return c.Respond(&tele.CallbackResponse{Text: msg})
 }
 
 func (b *Bot) onCallbackEditOutagePhoto(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -419,8 +416,7 @@ func (b *Bot) onCallbackEditOutagePhoto(ctx context.Context, c tele.Context, m *
 	if !newVal {
 		msg = msgOutagePhotoDisabled
 	}
-	_ = c.Respond(&tele.CallbackResponse{Text: msg})
-	return c.Send(msg)
+	return c.Respond(&tele.CallbackResponse{Text: msg})
 }
 
 func (b *Bot) onCallbackMapHide(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -428,8 +424,7 @@ func (b *Bot) onCallbackMapHide(ctx context.Context, c tele.Context, m *models.M
 		log.Printf("[bot] set monitor public error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgMapHideError})
 	}
-	_ = c.Respond(&tele.CallbackResponse{Text: msgMapHidden})
-	return c.Send(msgMapHidden)
+	return c.Respond(&tele.CallbackResponse{Text: msgMapHidden})
 }
 
 func (b *Bot) onCallbackMapShow(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -437,8 +432,7 @@ func (b *Bot) onCallbackMapShow(ctx context.Context, c tele.Context, m *models.M
 		log.Printf("[bot] set monitor public error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgMapHideError})
 	}
-	_ = c.Respond(&tele.CallbackResponse{Text: msgMapShown})
-	return c.Send(msgMapShown)
+	return c.Respond(&tele.CallbackResponse{Text: msgMapShown})
 }
 
 func (b *Bot) onCallbackTest(c tele.Context, m *models.Monitor) error {
@@ -458,5 +452,5 @@ func (b *Bot) onCallbackTest(c tele.Context, m *models.Monitor) error {
 	}
 
 	_ = c.Respond(&tele.CallbackResponse{Text: msgTestOK})
-	return c.Send(fmt.Sprintf(msgTestSentTo, msgTestOK, html.EscapeString(m.ChannelName)), htmlOpts)
+	return c.Edit(fmt.Sprintf(msgTestSentTo, msgTestOK, html.EscapeString(m.ChannelName)), tele.ModeHTML, &tele.ReplyMarkup{})
 }

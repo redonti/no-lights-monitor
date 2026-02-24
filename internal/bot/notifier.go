@@ -117,71 +117,92 @@ func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, 
 
 	if isOnline {
 		// Find next contiguous outage block, only within today (no wrap-around).
-		start, end := findNextOutageBlock(fact.Hours, currentHour)
-		if start < 0 {
+		startH, startM, endH, endM, ok := findNextOutageBlock(fact.Hours, currentHour)
+		if !ok {
 			log.Printf("[bot] outage: lights ON, no next outage block found today")
 			return ""
 		}
-		log.Printf("[bot] outage: lights ON, next outage block %02d:00-%02d:00", start, end)
-		return fmt.Sprintf(msgOutageNextPlanned, fmt.Sprintf("%02d:00 - %02d:00", start, end))
+		startStr := fmt.Sprintf("%02d:%02d", startH, startM)
+		endStr := fmt.Sprintf("%02d:%02d", endH, endM)
+		if endH == 24 {
+			endStr = "24:00"
+		}
+		log.Printf("[bot] outage: lights ON, next outage block %s-%s", startStr, endStr)
+		return fmt.Sprintf(msgOutageNextPlanned, fmt.Sprintf("%s - %s", startStr, endStr))
 	}
 
-	// Lights OFF: find next "yes" hour to estimate restoration (today only).
-	nextOn := findNextOnHour(fact.Hours, currentHour)
-	if nextOn < 0 {
-		log.Printf("[bot] outage: lights OFF, no restoration hour found today")
+	// Lights OFF: find next restoration (full "yes" hour or "first" at :30).
+	restoreH, restoreM, ok := findNextRestoration(fact.Hours, currentHour)
+	if !ok {
+		log.Printf("[bot] outage: lights OFF, no restoration found today")
 		return ""
 	}
-	hoursUntil := nextOn - currentHour
-	durStr := database.FormatDuration(time.Duration(hoursUntil) * time.Hour)
-	log.Printf("[bot] outage: lights OFF, next ON at %02d:00 (in %d hours)", nextOn, hoursUntil)
-	return fmt.Sprintf(msgOutageExpected, durStr, fmt.Sprintf("%02d:00", nextOn))
+	restoreTime := time.Date(nowKyiv.Year(), nowKyiv.Month(), nowKyiv.Day(), restoreH, restoreM, 0, 0, nowKyiv.Location())
+	if restoreTime.Before(nowKyiv) {
+		restoreTime = restoreTime.Add(24 * time.Hour)
+	}
+	durationUntil := restoreTime.Sub(nowKyiv)
+	durStr := database.FormatDuration(durationUntil)
+	restoreStr := fmt.Sprintf("%02d:%02d", restoreH, restoreM)
+	log.Printf("[bot] outage: lights OFF, next ON at %s (in %s)", restoreStr, durStr)
+	return fmt.Sprintf(msgOutageExpected, durStr, restoreStr)
 }
 
 // findNextOutageBlock finds the next contiguous block of outage hours
 // (status "no", "first", or "second") starting from the given hour.
-// Only searches within the current day (up to hour 23), no wrap-around.
-// Returns (startHour, endHour) or (-1, -1) if no outage found.
-func findNextOutageBlock(hours map[string]string, currentHour int) (int, int) {
+// Handles transitional hours: "first" (off 00-30) ends block at :30,
+// "second" (off 30-60) starts block at :30.
+// Returns (startH, startM, endH, endM, ok). endH may be 24 for midnight.
+func findNextOutageBlock(hours map[string]string, currentHour int) (startH, startM, endH, endM int, ok bool) {
 	for h := currentHour + 1; h < 24; h++ {
 		hourKey := strconv.Itoa(h + 1) // hours in data are 1-24
 		status := hours[hourKey]
 		if status == "no" || status == "first" || status == "second" {
-			// Found start of outage block. Extend to find the end.
-			start := h
-			end := h
+			// Block start: "second" => :30, else :00
+			if status == "second" {
+				startH, startM = h, 30
+			} else {
+				startH, startM = h, 0
+			}
+			// Block end for first hour
+			if status == "first" {
+				endH, endM = h, 30
+				return startH, startM, endH, endM, true
+			}
+			// "no" or "second": block continues
+			endH, endM = h+1, 0
 			for nextH := h + 1; nextH < 24; nextH++ {
 				nextKey := strconv.Itoa(nextH + 1)
 				nextStatus := hours[nextKey]
-				if nextStatus == "no" || nextStatus == "first" || nextStatus == "second" {
-					end = nextH
+				if nextStatus == "no" || nextStatus == "second" {
+					endH, endM = nextH+1, 0
+				} else if nextStatus == "first" {
+					endH, endM = nextH, 30
+					return startH, startM, endH, endM, true
 				} else {
 					break
 				}
 			}
-			// end is the last outage hour, so the block ends at end+1.
-			endDisplay := end + 1
-			if endDisplay == 24 {
-				endDisplay = 0
-			}
-			return start, endDisplay
+			return startH, startM, endH, endM, true
 		}
 	}
-	return -1, -1
+	return 0, 0, 0, 0, false
 }
 
-// findNextOnHour finds the next hour with "yes" status (power returning).
-// Only searches within the current day (up to hour 23), no wrap-around.
-// Returns the hour (0-23) or -1 if not found.
-func findNextOnHour(hours map[string]string, currentHour int) int {
+// findNextRestoration finds the next time power returns: "yes" (full hour) or "first" (at :30).
+// Returns (hour, minute, ok). Hour is 0-23, minute is 0 or 30.
+func findNextRestoration(hours map[string]string, currentHour int) (hour, minute int, ok bool) {
 	for h := currentHour + 1; h < 24; h++ {
-		hourKey := strconv.Itoa(h + 1) // hours in data are 1-24
+		hourKey := strconv.Itoa(h + 1)
 		status := hours[hourKey]
 		if status == "yes" {
-			return h
+			return h, 0, true
+		}
+		if status == "first" {
+			return h, 30, true
 		}
 	}
-	return -1
+	return 0, 0, false
 }
 
 // ── Channel error helpers ─────────────────────────────────────────────

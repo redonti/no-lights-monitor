@@ -72,27 +72,12 @@ type fetchedImage struct {
 	lastModified time.Time
 }
 
-// runCache holds per-run cached data to avoid duplicate downloads.
-type runCache struct {
-	images map[string]*fetchedImage // key: "region/filename"
-	errs   map[string]error
-}
-
-func newRunCache() *runCache {
-	return &runCache{
-		images: make(map[string]*fetchedImage),
-		errs:   make(map[string]error),
-	}
-}
-
 func (u *Updater) runAll(ctx context.Context) {
 	monitors, err := u.db.GetMonitorsWithChannels(ctx)
 	if err != nil {
 		log.Printf("[outage-photo] failed to list monitors: %v", err)
 		return
 	}
-
-	cache := newRunCache()
 
 	for _, m := range monitors {
 		if m.OutageRegion == "" || m.OutageGroup == "" {
@@ -115,18 +100,17 @@ func (u *Updater) runAll(ctx context.Context) {
 			continue
 		}
 
-		if err := u.updateOne(ctx, m, cache); err != nil {
+		if err := u.updateOne(ctx, m); err != nil {
 			log.Printf("[outage-photo] monitor %d: %v", m.ID, err)
 		}
 	}
 }
 
-func (u *Updater) updateOne(ctx context.Context, m *models.Monitor, cache *runCache) error {
+func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 	filename := groupToFilename(m.OutageGroup)
-	cacheKey := m.OutageRegion + "/" + filename
 
-	// Fetch image + Last-Modified (cached per region/group per run).
-	img, err := u.getCachedImage(cache, cacheKey, m.OutageRegion, filename)
+	// Fetch image + Last-Modified (always fresh, no caching).
+	img, err := u.fetchImage(m.OutageRegion, filename)
 	if err != nil {
 		return fmt.Errorf("fetch image: %w", err)
 	}
@@ -224,32 +208,21 @@ func (u *Updater) handleChannelError(ctx context.Context, m *models.Monitor, err
 	return bot.NotifyChannelError(ctx, u.bot, u.db, err, ownerID, m)
 }
 
-// getCachedImage downloads an image and parses Last-Modified, caching per run.
-func (u *Updater) getCachedImage(cache *runCache, key, region, filename string) (*fetchedImage, error) {
-	if err, ok := cache.errs[key]; ok {
-		return nil, err
-	}
-	if img, ok := cache.images[key]; ok {
-		return img, nil
-	}
-
+// fetchImage downloads an image and parses Last-Modified.
+func (u *Updater) fetchImage(region, filename string) (*fetchedImage, error) {
 	imageURL := fmt.Sprintf("%s/%s/%s", ghRawImageURL, region, filename)
 	resp, err := u.client.Get(imageURL)
 	if err != nil {
-		cache.errs[key] = err
 		return nil, fmt.Errorf("GET %s: %w", imageURL, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("GET %s: status %d", imageURL, resp.StatusCode)
-		cache.errs[key] = err
-		return nil, err
+		return nil, fmt.Errorf("GET %s: status %d", imageURL, resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		cache.errs[key] = err
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 
@@ -263,9 +236,7 @@ func (u *Updater) getCachedImage(cache *runCache, key, region, filename string) 
 		lastModified = time.Now()
 	}
 
-	img := &fetchedImage{data: data, lastModified: lastModified}
-	cache.images[key] = img
-	return img, nil
+	return &fetchedImage{data: data, lastModified: lastModified}, nil
 }
 
 // reLetterDigit matches the boundary between letters and digits (e.g. "gpv1" → "gpv-1").

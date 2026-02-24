@@ -83,6 +83,8 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		return b.onCallbackEditNotifyOutage(ctx, c, targetMonitor)
 	case "edit_outage_photo":
 		return b.onCallbackEditOutagePhoto(ctx, c, targetMonitor)
+	case "edit_graph":
+		return b.onCallbackEditGraph(ctx, c, targetMonitor)
 	case "map_hide":
 		return b.onCallbackMapHide(ctx, c, targetMonitor)
 	case "map_show":
@@ -214,6 +216,14 @@ func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
 	if m.ChannelID != 0 {
 		rows = append(rows, []tele.InlineButton{
 			{Text: msgEditBtnRefreshChannel, Data: fmt.Sprintf("edit_channel_refresh:%d", m.ID)},
+		})
+		// Graph toggle.
+		graphBtnText := msgEditBtnShowGraph
+		if m.GraphEnabled {
+			graphBtnText = msgEditBtnHideGraph
+		}
+		rows = append(rows, []tele.InlineButton{
+			{Text: graphBtnText, Data: fmt.Sprintf("edit_graph:%d", m.ID)},
 		})
 	}
 	// Outage group button.
@@ -380,6 +390,20 @@ func (b *Bot) onCallbackEditNotifyOutage(ctx context.Context, c tele.Context, m 
 	msg := msgNotifyOutageEnabled
 	if !newVal {
 		msg = msgNotifyOutageDisabled
+	}
+	_ = c.Respond(&tele.CallbackResponse{Text: msg})
+	return c.Send(msg)
+}
+
+func (b *Bot) onCallbackEditGraph(ctx context.Context, c tele.Context, m *models.Monitor) error {
+	newVal := !m.GraphEnabled
+	if err := b.db.SetMonitorGraphEnabled(ctx, m.ID, newVal); err != nil {
+		log.Printf("[bot] set graph_enabled error: %v", err)
+		return c.Respond(&tele.CallbackResponse{Text: msgGraphToggleError})
+	}
+	msg := msgGraphEnabled
+	if !newVal {
+		msg = msgGraphDisabled
 	}
 	_ = c.Respond(&tele.CallbackResponse{Text: msg})
 	return c.Send(msg)

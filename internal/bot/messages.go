@@ -243,6 +243,8 @@ const (
 	msgEditBtnRefreshChannel  = "🔄 Оновити тег каналу"
 	msgEditBtnShowAddress     = "📍 Показувати адресу в сповіщеннях"
 	msgEditBtnHideAddress     = "📍 Приховати адресу в сповіщеннях"
+	msgEditBtnShowGraph       = "📊 Публікувати графік аптайму в каналі"
+	msgEditBtnHideGraph       = "📊 Не публікувати графік аптайму"
 	msgMapBtnHide             = "🗺 Прибрати з карти"
 	msgMapBtnShow             = "🗺 Додати на карту"
 )
@@ -251,6 +253,9 @@ const (
 	msgNotifyAddressEnabled  = "✅ Адресу буде показано в сповіщеннях."
 	msgNotifyAddressDisabled = "✅ Адресу приховано зі сповіщень."
 	msgNotifyAddressError    = "Помилка зміни налаштування."
+	msgGraphEnabled          = "✅ Графік аптайму буде публікуватися в каналі."
+	msgGraphDisabled         = "✅ Графік аптайму не буде публікуватися."
+	msgGraphToggleError      = "Помилка зміни налаштування."
 )
 
 // ── Outage group ──────────────────────────────────────────────────────

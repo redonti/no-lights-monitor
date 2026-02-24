@@ -78,10 +78,13 @@ func (u *Updater) UpdateSingle(ctx context.Context, monitorID, channelID int64) 
 	}
 	for _, m := range monitors {
 		if m.ID == monitorID {
+			if !m.GraphEnabled {
+				return nil
+			}
 			return u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.Address, m.NotifyAddress, m.GraphMessageID, m.GraphWeekStart, weekStart, now)
 		}
 	}
-	// Monitor just created, no graph yet.
+	// Monitor just created — graph_enabled defaults to true, so post.
 	return u.updateOne(ctx, monitorID, channelID, "", "", false, 0, nil, weekStart, now)
 }
 
@@ -98,6 +101,9 @@ func (u *Updater) runAll(ctx context.Context) {
 	weekStart := currentWeekStart(now)
 
 	for _, m := range monitors {
+		if !m.GraphEnabled {
+			continue
+		}
 		if err := u.updateOne(ctx, m.ID, m.ChannelID, m.Name, m.Address, m.NotifyAddress, m.GraphMessageID, m.GraphWeekStart, weekStart, now); err != nil {
 			log.Printf("[graph] monitor %d: %v", m.ID, err)
 		}

@@ -102,6 +102,10 @@
             <span class="text-sm text-stone-700">Публікувати фото графіка відключень в каналі</span>
             <input id="toggle-outage-photo" type="checkbox" onchange="saveToggle('outage_photo_enabled', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
           </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-sm text-stone-700">Публікувати графік аптайму в каналі</span>
+            <input id="toggle-graph" type="checkbox" onchange="saveToggle('graph_enabled', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+          </label>
         </div>
 
         <!-- Outage group -->
@@ -200,6 +204,7 @@
       document.getElementById('toggle-notify-address').checked = m.notify_address;
       document.getElementById('toggle-notify-outage').checked = m.notify_outage;
       document.getElementById('toggle-outage-photo').checked = m.outage_photo_enabled;
+      document.getElementById('toggle-graph').checked = m.graph_enabled;
 
       // Outage display
       if (m.outage_group) {

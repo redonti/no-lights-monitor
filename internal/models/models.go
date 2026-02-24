@@ -30,6 +30,7 @@ type Monitor struct {
 	OutageGroup        string     `json:"outage_group" db:"outage_group"`     // outage-data-ua group ID (e.g. "GPV1.1")
 	NotifyOutage       bool       `json:"notify_outage" db:"notify_outage"`   // whether to show outage schedule in notifications
 	OutagePhotoEnabled bool       `json:"outage_photo_enabled" db:"outage_photo_enabled"` // whether to post outage schedule photo to channel
+	GraphEnabled       bool       `json:"graph_enabled" db:"graph_enabled"` // whether to post uptime graph to channel
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty" db:"last_heartbeat_at"`
 	LastStatusChangeAt time.Time  `json:"last_status_change_at" db:"last_status_change_at"`
 	GraphMessageID       int        `json:"graph_message_id" db:"graph_message_id"`

@@ -69,6 +69,7 @@ func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 		"outage_group":    m.OutageGroup,
 		"notify_outage":        m.NotifyOutage,
 		"outage_photo_enabled": m.OutagePhotoEnabled,
+		"graph_enabled":        m.GraphEnabled,
 		"channel_name":         m.ChannelName,
 		"monitor_type":    m.MonitorType,
 		"ping_target":     m.PingTarget,
@@ -88,6 +89,7 @@ type settingsUpdateRequest struct {
 	OutageGroup   *string  `json:"outage_group"`
 	NotifyOutage       *bool `json:"notify_outage"`
 	OutagePhotoEnabled *bool `json:"outage_photo_enabled"`
+	GraphEnabled       *bool `json:"graph_enabled"`
 }
 
 // UpdateSettings updates editable fields of a monitor.
@@ -167,6 +169,13 @@ func (h *Handlers) UpdateSettings(c *fiber.Ctx) error {
 	if req.OutagePhotoEnabled != nil && *req.OutagePhotoEnabled != m.OutagePhotoEnabled {
 		if err := h.DB.SetMonitorOutagePhotoEnabled(ctx, m.ID, *req.OutagePhotoEnabled); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update outage_photo_enabled"})
+		}
+	}
+
+	// Update graph enabled.
+	if req.GraphEnabled != nil && *req.GraphEnabled != m.GraphEnabled {
+		if err := h.DB.SetMonitorGraphEnabled(ctx, m.ID, *req.GraphEnabled); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update graph_enabled"})
 		}
 	}
 

@@ -202,8 +202,7 @@ func (b *Bot) onCallbackInfo(ctx context.Context, c tele.Context, m *models.Moni
 	return c.Edit(bld.String(), tele.ModeHTML, keyboard)
 }
 
-func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
-	_ = c.Respond(&tele.CallbackResponse{})
+func (b *Bot) renderEditMenu(c tele.Context, m *models.Monitor) error {
 	addrBtnText := msgEditBtnHideAddress
 	if !m.NotifyAddress {
 		addrBtnText = msgEditBtnShowAddress
@@ -254,6 +253,11 @@ func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
 	return c.Edit(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name)), tele.ModeHTML, keyboard)
 }
 
+func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {
+	_ = c.Respond(&tele.CallbackResponse{})
+	return b.renderEditMenu(c, m)
+}
+
 func (b *Bot) onCallbackEditName(c tele.Context, m *models.Monitor) error {
 	_ = c.Respond(&tele.CallbackResponse{})
 	b.mu.Lock()
@@ -302,11 +306,9 @@ func (b *Bot) onCallbackEditNotifyAddress(ctx context.Context, c tele.Context, m
 	}
 	// Update in-memory state in heartbeat service.
 	b.heartbeatSvc.SetMonitorNotifyAddress(m.Token, newVal)
-	msg := msgNotifyAddressEnabled
-	if !newVal {
-		msg = msgNotifyAddressDisabled
-	}
-	return c.Respond(&tele.CallbackResponse{Text: msg})
+	_ = c.Respond(&tele.CallbackResponse{})
+	m.NotifyAddress = newVal
+	return b.renderEditMenu(c, m)
 }
 
 func (b *Bot) onCallbackEditOutage(c tele.Context, m *models.Monitor) error {
@@ -386,11 +388,9 @@ func (b *Bot) onCallbackEditNotifyOutage(ctx context.Context, c tele.Context, m 
 		return c.Respond(&tele.CallbackResponse{Text: msgNotifyOutageError})
 	}
 	b.heartbeatSvc.SetMonitorNotifyOutage(m.Token, newVal)
-	msg := msgNotifyOutageEnabled
-	if !newVal {
-		msg = msgNotifyOutageDisabled
-	}
-	return c.Respond(&tele.CallbackResponse{Text: msg})
+	_ = c.Respond(&tele.CallbackResponse{})
+	m.NotifyOutage = newVal
+	return b.renderEditMenu(c, m)
 }
 
 func (b *Bot) onCallbackEditGraph(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -399,11 +399,9 @@ func (b *Bot) onCallbackEditGraph(ctx context.Context, c tele.Context, m *models
 		log.Printf("[bot] set graph_enabled error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgGraphToggleError})
 	}
-	msg := msgGraphEnabled
-	if !newVal {
-		msg = msgGraphDisabled
-	}
-	return c.Respond(&tele.CallbackResponse{Text: msg})
+	_ = c.Respond(&tele.CallbackResponse{})
+	m.GraphEnabled = newVal
+	return b.renderEditMenu(c, m)
 }
 
 func (b *Bot) onCallbackEditOutagePhoto(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -412,11 +410,9 @@ func (b *Bot) onCallbackEditOutagePhoto(ctx context.Context, c tele.Context, m *
 		log.Printf("[bot] set outage_photo_enabled error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgOutagePhotoError})
 	}
-	msg := msgOutagePhotoEnabled
-	if !newVal {
-		msg = msgOutagePhotoDisabled
-	}
-	return c.Respond(&tele.CallbackResponse{Text: msg})
+	_ = c.Respond(&tele.CallbackResponse{})
+	m.OutagePhotoEnabled = newVal
+	return b.renderEditMenu(c, m)
 }
 
 func (b *Bot) onCallbackMapHide(ctx context.Context, c tele.Context, m *models.Monitor) error {

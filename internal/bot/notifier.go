@@ -154,7 +154,23 @@ func (n *TelegramNotifier) buildOutageLine(region, group string, isOnline bool, 
 // "second" (off 30-60) starts block at :30.
 // Returns (startH, startM, endH, endM, ok). endH may be 24 for midnight.
 func findNextOutageBlock(hours map[string]string, currentHour int) (startH, startM, endH, endM int, ok bool) {
-	for h := currentHour + 1; h < 24; h++ {
+	h := currentHour + 1
+
+	// If we just got lights ON early during a scheduled outage block,
+	// we should skip the remaining hours of this current block
+	// so we don't report them as the "next" outage block.
+	curKey := strconv.Itoa(currentHour + 1)
+	curStatus := hours[curKey]
+	if curStatus == "no" || curStatus == "first" || curStatus == "second" {
+		for ; h < 24; h++ {
+			st := hours[strconv.Itoa(h+1)]
+			if st == "yes" {
+				break
+			}
+		}
+	}
+
+	for ; h < 24; h++ {
 		hourKey := strconv.Itoa(h + 1) // hours in data are 1-24
 		status := hours[hourKey]
 		if status == "no" || status == "first" || status == "second" {

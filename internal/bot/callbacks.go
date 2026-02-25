@@ -188,18 +188,7 @@ func (b *Bot) onCallbackInfo(ctx context.Context, c tele.Context, m *models.Moni
 	bld.WriteString("\n")
 	bld.WriteString(fmt.Sprintf(msgInfoDetailSettings, b.baseURL, m.SettingsToken))
 
-	mapBtn := tele.InlineButton{
-		Text: msgMapBtnHide,
-		Data: fmt.Sprintf("map_hide:%d", m.ID),
-	}
-	if !m.IsPublic {
-		mapBtn = tele.InlineButton{
-			Text: msgMapBtnShow,
-			Data: fmt.Sprintf("map_show:%d", m.ID),
-		}
-	}
-	keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{{mapBtn}}}
-	return c.Edit(bld.String(), tele.ModeHTML, keyboard)
+	return c.Edit(bld.String(), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
 func (b *Bot) renderEditMenu(c tele.Context, m *models.Monitor) error {
@@ -207,10 +196,17 @@ func (b *Bot) renderEditMenu(c tele.Context, m *models.Monitor) error {
 	if !m.NotifyAddress {
 		addrBtnText = msgEditBtnShowAddress
 	}
+	mapBtnText := msgMapBtnHide
+	mapBtnAction := "map_hide"
+	if !m.IsPublic {
+		mapBtnText = msgMapBtnShow
+		mapBtnAction = "map_show"
+	}
 	rows := [][]tele.InlineButton{
 		{{Text: msgEditBtnName, Data: fmt.Sprintf("edit_name:%d", m.ID)}},
 		{{Text: msgEditBtnAddress, Data: fmt.Sprintf("edit_address:%d", m.ID)}},
 		{{Text: addrBtnText, Data: fmt.Sprintf("edit_notify_address:%d", m.ID)}},
+		{{Text: mapBtnText, Data: fmt.Sprintf("%s:%d", mapBtnAction, m.ID)}},
 	}
 	if m.ChannelID != 0 {
 		rows = append(rows, []tele.InlineButton{
@@ -420,7 +416,9 @@ func (b *Bot) onCallbackMapHide(ctx context.Context, c tele.Context, m *models.M
 		log.Printf("[bot] set monitor public error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgMapHideError})
 	}
-	return c.Respond(&tele.CallbackResponse{Text: msgMapHidden})
+	_ = c.Respond(&tele.CallbackResponse{})
+	m.IsPublic = false
+	return b.renderEditMenu(c, m)
 }
 
 func (b *Bot) onCallbackMapShow(ctx context.Context, c tele.Context, m *models.Monitor) error {
@@ -428,7 +426,9 @@ func (b *Bot) onCallbackMapShow(ctx context.Context, c tele.Context, m *models.M
 		log.Printf("[bot] set monitor public error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgMapHideError})
 	}
-	return c.Respond(&tele.CallbackResponse{Text: msgMapShown})
+	_ = c.Respond(&tele.CallbackResponse{})
+	m.IsPublic = true
+	return b.renderEditMenu(c, m)
 }
 
 func (b *Bot) onCallbackTest(c tele.Context, m *models.Monitor) error {

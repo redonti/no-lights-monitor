@@ -84,7 +84,7 @@ func New(token string, db *database.DB, hbSvc *heartbeat.Service, baseURL string
 	if err := b.SetCommands([]tele.Command{
 		{Text: "create", Description: "Налаштувати новий монітор"},
 		{Text: "info", Description: "Детальна інформація та URL для пінгу"},
-		{Text: "edit", Description: "Змінити назву або адресу монітора"},
+		{Text: "edit", Description: "Змінити налаштування монітора"},
 		{Text: "test", Description: "Відправити тестове повідомлення"},
 		{Text: "stop", Description: "Призупинити моніторинг"},
 		{Text: "resume", Description: "Відновити моніторинг"},

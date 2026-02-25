@@ -37,6 +37,7 @@ type Monitor struct {
 	GraphWeekStart       *time.Time `json:"graph_week_start,omitempty" db:"graph_week_start"`
 	OutagePhotoMessageID int        `json:"outage_photo_message_id" db:"outage_photo_message_id"`
 	OutagePhotoUpdatedAt *time.Time `json:"outage_photo_updated_at,omitempty" db:"outage_photo_updated_at"`
+	OutagePhotoETag      string     `json:"outage_photo_etag" db:"outage_photo_etag"`
 	SettingsToken      string     `json:"settings_token" db:"settings_token"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 }

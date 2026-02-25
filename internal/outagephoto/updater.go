@@ -66,10 +66,11 @@ func (u *Updater) Start(ctx context.Context) {
 	}
 }
 
-// fetchedImage holds a downloaded image and its Last-Modified date.
-type fetchedImage struct {
-	data         []byte
-	lastModified time.Time
+// fetchResult holds a downloaded image and its ETag, or signals not-modified.
+type fetchResult struct {
+	notModified bool
+	data        []byte
+	etag        string
 }
 
 func (u *Updater) runAll(ctx context.Context) {
@@ -109,40 +110,41 @@ func (u *Updater) runAll(ctx context.Context) {
 func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 	filename := groupToFilename(m.OutageGroup)
 
-	// Fetch image + Last-Modified (always fresh, no caching).
-	img, err := u.fetchImage(m.OutageRegion, filename)
-	if err != nil {
-		return fmt.Errorf("fetch image: %w", err)
-	}
-
-	// If Last-Modified matches stored date, nothing changed.
-	if m.OutagePhotoUpdatedAt != nil && m.OutagePhotoUpdatedAt.Equal(img.lastModified) {
-		return nil
-	}
-
-	// Check if image is from today (Europe/Kyiv).
-	kyiv, _ := time.LoadLocation("Europe/Kyiv")
-	now := time.Now().In(kyiv)
-	modKyiv := img.lastModified.In(kyiv)
-	if modKyiv.Year() != now.Year() || modKyiv.YearDay() != now.YearDay() {
-		// Image is stale (not from today) — delete old photo if exists.
-		if m.OutagePhotoMessageID != 0 {
+	// If the existing photo is from a previous day, delete it and force a plain
+	// GET (no If-None-Match) so we always get fresh image bytes for the new day.
+	storedETag := m.OutagePhotoETag
+	if m.OutagePhotoMessageID != 0 && m.OutagePhotoUpdatedAt != nil {
+		kyiv, _ := time.LoadLocation("Europe/Kyiv")
+		now := time.Now().In(kyiv)
+		seenAt := m.OutagePhotoUpdatedAt.In(kyiv)
+		if seenAt.Year() != now.Year() || seenAt.YearDay() != now.YearDay() {
 			u.deleteOldPhoto(m)
 			if err := u.db.ClearOutagePhoto(ctx, m.ID); err != nil {
 				return fmt.Errorf("clear stale photo: %w", err)
 			}
-			log.Printf("[outage-photo] monitor %d: deleted stale photo", m.ID)
+			log.Printf("[outage-photo] monitor %d: deleted stale photo, fetching new", m.ID)
+			m.OutagePhotoMessageID = 0
+			storedETag = ""
 		}
+	}
+
+	result, err := u.fetchImage(m.OutageRegion, filename, storedETag)
+	if err != nil {
+		return fmt.Errorf("fetch image: %w", err)
+	}
+
+	if result.notModified {
 		return nil
 	}
 
+	// New image received — post or update Telegram.
 	chat := &tele.Chat{ID: m.ChannelID}
 	silent := &tele.SendOptions{DisableNotification: true}
 
 	if m.OutagePhotoMessageID != 0 {
 		// Try to edit existing photo in-place.
 		editPhoto := &tele.Photo{
-			File: tele.FromReader(newPNGReader(img.data, filename)),
+			File: tele.FromReader(newPNGReader(result.data, filename)),
 		}
 		editMsg := &tele.Message{
 			ID:   m.OutagePhotoMessageID,
@@ -151,7 +153,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 		_, err := u.bot.EditMedia(editMsg, editPhoto)
 		if err != nil {
 			if strings.Contains(err.Error(), "message is not modified") {
-				if err := u.db.UpdateOutagePhoto(ctx, m.ID, m.OutagePhotoMessageID, img.lastModified); err != nil {
+				if err := u.db.UpdateOutagePhoto(ctx, m.ID, m.OutagePhotoMessageID, result.etag, time.Now()); err != nil {
 					return fmt.Errorf("save photo timestamp: %w", err)
 				}
 				return nil
@@ -162,7 +164,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 			log.Printf("[outage-photo] monitor %d: edit failed (%v), sending new", m.ID, err)
 			u.deleteOldPhoto(m)
 		} else {
-			if err := u.db.UpdateOutagePhoto(ctx, m.ID, m.OutagePhotoMessageID, img.lastModified); err != nil {
+			if err := u.db.UpdateOutagePhoto(ctx, m.ID, m.OutagePhotoMessageID, result.etag, time.Now()); err != nil {
 				return fmt.Errorf("save photo id: %w", err)
 			}
 			log.Printf("[outage-photo] monitor %d: updated photo (msg %d)", m.ID, m.OutagePhotoMessageID)
@@ -172,7 +174,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 
 	// Send new photo.
 	photo := &tele.Photo{
-		File: tele.FromReader(newPNGReader(img.data, filename)),
+		File: tele.FromReader(newPNGReader(result.data, filename)),
 	}
 	sent, err := u.bot.Send(chat, photo, silent)
 	if err != nil {
@@ -181,7 +183,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 		}
 		return fmt.Errorf("send photo: %w", err)
 	}
-	if err := u.db.UpdateOutagePhoto(ctx, m.ID, sent.ID, img.lastModified); err != nil {
+	if err := u.db.UpdateOutagePhoto(ctx, m.ID, sent.ID, result.etag, time.Now()); err != nil {
 		return fmt.Errorf("save photo id: %w", err)
 	}
 	log.Printf("[outage-photo] monitor %d: sent new photo (msg %d)", m.ID, sent.ID)
@@ -208,14 +210,28 @@ func (u *Updater) handleChannelError(ctx context.Context, m *models.Monitor, err
 	return bot.NotifyChannelError(ctx, u.bot, u.db, err, ownerID, m)
 }
 
-// fetchImage downloads an image and parses Last-Modified.
-func (u *Updater) fetchImage(region, filename string) (*fetchedImage, error) {
+// fetchImage downloads an image using a conditional GET (If-None-Match).
+// Returns notModified=true if the server responded with 304.
+func (u *Updater) fetchImage(region, filename, storedETag string) (*fetchResult, error) {
 	imageURL := fmt.Sprintf("%s/%s/%s", ghRawImageURL, region, filename)
-	resp, err := u.client.Get(imageURL)
+
+	req, err := http.NewRequest(http.MethodGet, imageURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if storedETag != "" {
+		req.Header.Set("If-None-Match", storedETag)
+	}
+
+	resp, err := u.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", imageURL, err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return &fetchResult{notModified: true}, nil
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: status %d", imageURL, resp.StatusCode)
@@ -226,17 +242,7 @@ func (u *Updater) fetchImage(region, filename string) (*fetchedImage, error) {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 
-	// Parse Last-Modified header for freshness check.
-	var lastModified time.Time
-	if lm := resp.Header.Get("Last-Modified"); lm != "" {
-		lastModified, _ = time.Parse(time.RFC1123, lm)
-	}
-	if lastModified.IsZero() {
-		// Fallback: use current time (will be treated as fresh today).
-		lastModified = time.Now()
-	}
-
-	return &fetchedImage{data: data, lastModified: lastModified}, nil
+	return &fetchResult{data: data, etag: resp.Header.Get("ETag")}, nil
 }
 
 // reLetterDigit matches the boundary between letters and digits (e.g. "gpv1" → "gpv-1").

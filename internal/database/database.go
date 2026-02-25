@@ -17,7 +17,7 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	is_online, is_active, is_public, notify_address,
 	outage_region, outage_group, notify_outage, outage_photo_enabled,
 	graph_enabled, last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start,
-	outage_photo_message_id, outage_photo_updated_at, settings_token, created_at`
+	outage_photo_message_id, outage_photo_updated_at, outage_photo_etag, settings_token, created_at`
 
 // monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
 const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
@@ -25,7 +25,7 @@ const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.la
 	m.is_online, m.is_active, m.is_public, m.notify_address,
 	m.outage_region, m.outage_group, m.notify_outage, m.outage_photo_enabled,
 	m.graph_enabled, m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start,
-	m.outage_photo_message_id, m.outage_photo_updated_at, m.settings_token, m.created_at`
+	m.outage_photo_message_id, m.outage_photo_updated_at, m.outage_photo_etag, m.settings_token, m.created_at`
 
 const userColumns = `id, telegram_id, username, first_name, created_at`
 
@@ -93,6 +93,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS graph_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_message_id INT NOT NULL DEFAULT 0;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_updated_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_etag TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_token UUID UNIQUE DEFAULT gen_random_uuid();
 	UPDATE monitors SET settings_token = gen_random_uuid() WHERE settings_token IS NULL;
 	ALTER TABLE monitors ALTER COLUMN settings_token SET NOT NULL;
@@ -350,18 +351,18 @@ func (db *DB) UpdateGraphMessage(ctx context.Context, monitorID int64, messageID
 	return err
 }
 
-// UpdateOutagePhoto stores the Telegram message ID and commit date for the outage schedule photo.
-func (db *DB) UpdateOutagePhoto(ctx context.Context, monitorID int64, messageID int, updatedAt time.Time) error {
+// UpdateOutagePhoto stores the Telegram message ID, ETag, and fetch time for the outage schedule photo.
+func (db *DB) UpdateOutagePhoto(ctx context.Context, monitorID int64, messageID int, etag string, updatedAt time.Time) error {
 	_, err := db.Pool.Exec(ctx, `
-		UPDATE monitors SET outage_photo_message_id = $2, outage_photo_updated_at = $3 WHERE id = $1
-	`, monitorID, messageID, updatedAt)
+		UPDATE monitors SET outage_photo_message_id = $2, outage_photo_etag = $3, outage_photo_updated_at = $4 WHERE id = $1
+	`, monitorID, messageID, etag, updatedAt)
 	return err
 }
 
 // ClearOutagePhoto resets the outage photo fields (e.g. after deleting the message).
 func (db *DB) ClearOutagePhoto(ctx context.Context, monitorID int64) error {
 	_, err := db.Pool.Exec(ctx, `
-		UPDATE monitors SET outage_photo_message_id = 0, outage_photo_updated_at = NULL WHERE id = $1
+		UPDATE monitors SET outage_photo_message_id = 0, outage_photo_etag = '', outage_photo_updated_at = NULL WHERE id = $1
 	`, monitorID)
 	return err
 }

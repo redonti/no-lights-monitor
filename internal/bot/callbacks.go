@@ -246,7 +246,7 @@ func (b *Bot) renderEditMenu(c tele.Context, m *models.Monitor) error {
 		}
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Edit(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name)), tele.ModeHTML, keyboard)
+	return c.Edit(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name), b.baseURL, m.SettingsToken), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {

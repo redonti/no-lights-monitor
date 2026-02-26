@@ -193,7 +193,7 @@ const (
 const msgEditHeader = "<b>Редагування монітора</b>\n\nОберіть монітор для редагування:\n\n"
 
 const (
-	msgEditChoose       = "Монітор: <b>%s</b>\n\nЩо бажаєте змінити?"
+	msgEditChoose       = "Монітор: <b>%s</b>\n\nЩо бажаєте змінити?\n\n⚙️ <b>Налаштування на вебсайті:</b>\n%s/settings/%s"
 	msgEditNamePrompt   = "Поточна назва: <b>%s</b>\n\nВведіть нову назву монітора:"
 	msgEditAddressPrompt = "Поточна адреса: <b>%s</b>\n\nВведіть нову адресу або надішліть геопозицію через 📎 → Геопозиція."
 	msgEditNameTooShort = "Назва занадто коротка. Введіть більш змістовну назву."
@@ -232,7 +232,7 @@ const (
 	msgInfoDetailTypeHB   = "<b>📡 Тип:</b> %s\n"
 	msgInfoDetailURLLabel  = "<b>🔗 URL для пінгу:</b>\n"
 	msgInfoDetailURL       = "<code>%s/api/ping/%s</code>\n\n"
-	msgInfoDetailSettings  = "⚙️ <b>Налаштування:</b>\n%s/settings/%s\n\n"
+	msgInfoDetailSettings  = "⚙️ <b>Налаштування на вебсайті:</b>\n%s/settings/%s\n\n"
 )
 
 // ── Buttons ───────────────────────────────────────────────────────────

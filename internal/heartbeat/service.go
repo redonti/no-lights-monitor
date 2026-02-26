@@ -180,30 +180,70 @@ func (s *Service) RemoveMonitor(token string) {
 	s.monitors.Delete(token)
 }
 
-// StartChecker runs a background loop that marks monitors as offline
-// when their heartbeats go stale.
-func (s *Service) StartChecker(ctx context.Context, intervalSec int) {
+// StartHeartbeatChecker runs a background loop that checks heartbeat monitors
+// (devices that send pings to the API) for stale heartbeats.
+func (s *Service) StartHeartbeatChecker(ctx context.Context, intervalSec int) {
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
 	defer ticker.Stop()
 
-	log.Printf("[heartbeat] checker started (interval=%ds, threshold=%s)", intervalSec, s.threshold)
+	log.Printf("[heartbeat] heartbeat checker started (interval=%ds, threshold=%s)", intervalSec, s.threshold)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[heartbeat] checker stopped")
+			log.Println("[heartbeat] heartbeat checker stopped")
 			return
 		case <-ticker.C:
-			s.checkAll(ctx)
+			s.checkHeartbeatMonitors(ctx)
 		}
 	}
 }
 
-func (s *Service) checkAll(ctx context.Context) {
+// StartPingChecker runs a background loop that actively ICMP-pings targets
+// and checks ping monitors for status changes.
+func (s *Service) StartPingChecker(ctx context.Context, intervalSec int) {
+	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
+	defer ticker.Stop()
+
+	log.Printf("[heartbeat] ping checker started (interval=%ds, threshold=%s)", intervalSec, s.threshold)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("[heartbeat] ping checker stopped")
+			return
+		case <-ticker.C:
+			s.checkPingMonitors(ctx)
+		}
+	}
+}
+
+// checkHeartbeatMonitors checks all heartbeat-type monitors for stale heartbeats
+// and triggers status change notifications when needed.
+func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
 	now := time.Now()
-	// Grace period is 2x threshold to survive deploy downtime.
-	// During deploy, API may be down for several minutes (Go build on small servers),
-	// so pings don't reach Redis. We need to wait long enough for pings to resume.
+	inGracePeriod := now.Sub(s.startupTime) < 2*s.threshold
+
+	s.monitors.Range(func(key, value any) bool {
+		info := value.(*monitorInfo)
+
+		info.mu.Lock()
+		if !info.IsActive || info.MonitorType != "heartbeat" {
+			info.mu.Unlock()
+			return true
+		}
+		monitorID := info.ID
+		info.mu.Unlock()
+
+		s.checkAndTransition(ctx, info, monitorID, now, inGracePeriod)
+		return true
+	})
+}
+
+// checkPingMonitors first executes all ICMP pings concurrently, then checks
+// ping monitors for status changes.
+func (s *Service) checkPingMonitors(ctx context.Context) {
+	now := time.Now()
 	inGracePeriod := now.Sub(s.startupTime) < 2*s.threshold
 
 	// Phase 1: Execute all ICMP pings concurrently.
@@ -236,102 +276,96 @@ func (s *Service) checkAll(ctx context.Context) {
 	})
 	wg.Wait()
 
-	// Phase 2: Check all monitors (both heartbeat and ping) for status changes.
+	// Phase 2: Check all ping monitors for status changes.
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)
 
-		// Lock and check state.
 		info.mu.Lock()
-		// Skip inactive monitors (paused by user).
-		if !info.IsActive {
+		if !info.IsActive || info.MonitorType != "ping" {
 			info.mu.Unlock()
 			return true
 		}
-
-		// Capture monitor ID for cache lookup.
 		monitorID := info.ID
 		info.mu.Unlock()
 
-		// Check heartbeat in cache (outside lock - this is an I/O operation).
-		lastHB, err := s.cache.GetHeartbeat(ctx, monitorID)
-		if err != nil {
-			if errors.Is(err, redis.Nil) {
-				// Redis key doesn't exist (new monitor, Redis restarted and lost data).
-				// Treat as very old heartbeat so monitor will be marked offline if it hasn't pinged.
-				lastHB = time.Time{} // Zero time (Unix epoch)
-			} else {
-				// Redis connection error or other issue.
-				// Skip this monitor to avoid false offline notifications during Redis outages.
-				log.Printf("[heartbeat] redis error for monitor %d: %v", monitorID, err)
-				return true
-			}
-		}
-
-		// Determine if heartbeat is fresh or stale.
-		isFresh := now.Sub(lastHB) <= s.threshold
-
-		// Lock again to update state if needed.
-		info.mu.Lock()
-
-		var statusChanged bool
-		var isNowOnline bool
-		var duration time.Duration
-
-		// Re-check current state after re-acquiring lock (in case it changed during I/O).
-		// In practice, checkAll is single-threaded, but this is more robust.
-		if info.IsOnline && !isFresh && !inGracePeriod {
-			// Online → Offline transition.
-			// Skip during grace period to prevent false offline notifications after system restart.
-			duration = now.Sub(info.LastChange)
-			info.IsOnline = false
-			info.LastChange = now.Add(-s.threshold)
-			statusChanged = true
-			isNowOnline = false
-		} else if !info.IsOnline && isFresh {
-			// Offline → Online transition.
-			// Allow during grace period - monitors coming online is always good!
-			duration = now.Sub(info.LastChange)
-			info.IsOnline = true
-			info.LastChange = now
-			statusChanged = true
-			isNowOnline = true
-		}
-
-		// Capture values for async operations.
-		monitorName := info.Name
-		monitorAddress := info.Address
-		notifyAddress := info.NotifyAddress
-		outageRegion := info.OutageRegion
-		outageGroup := info.OutageGroup
-		notifyOutage := info.NotifyOutage
-		channelID := info.ChannelID
-		info.mu.Unlock()
-
-		// Perform expensive operations outside the lock.
-		if statusChanged {
-			go func() {
-				if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, isNowOnline); err != nil {
-					log.Printf("[heartbeat] failed to update status for monitor %d: %v", monitorID, err)
-				}
-			}()
-
-			if s.notifier != nil && channelID != 0 {
-				when := now
-				if (!isNowOnline){
-					when = now.Add(-s.threshold)
-				}
-				go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, monitorAddress, notifyAddress, isNowOnline, duration, when, outageRegion, outageGroup, notifyOutage)
-			}
-
-			if isNowOnline {
-				log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(duration))
-			} else {
-				log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", monitorID, monitorName, database.FormatDuration(duration))
-			}
-		}
-
+		s.checkAndTransition(ctx, info, monitorID, now, inGracePeriod)
 		return true
 	})
+}
+
+// checkAndTransition reads the heartbeat from Redis and updates the monitor's
+// online/offline state, firing notifications on transitions.
+func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, monitorID int64, now time.Time, inGracePeriod bool) {
+	// Check heartbeat in cache (outside lock - this is an I/O operation).
+	lastHB, err := s.cache.GetHeartbeat(ctx, monitorID)
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			// Redis key doesn't exist (new monitor, Redis restarted and lost data).
+			// Treat as very old heartbeat so monitor will be marked offline if it hasn't pinged.
+			lastHB = time.Time{} // Zero time (Unix epoch)
+		} else {
+			// Redis connection error or other issue.
+			// Skip this monitor to avoid false offline notifications during Redis outages.
+			log.Printf("[heartbeat] redis error for monitor %d: %v", monitorID, err)
+			return
+		}
+	}
+
+	isFresh := now.Sub(lastHB) <= s.threshold
+
+	info.mu.Lock()
+
+	var statusChanged bool
+	var isNowOnline bool
+	var duration time.Duration
+
+	if info.IsOnline && !isFresh && !inGracePeriod {
+		// Online → Offline transition.
+		duration = now.Sub(info.LastChange)
+		info.IsOnline = false
+		info.LastChange = now.Add(-s.threshold)
+		statusChanged = true
+		isNowOnline = false
+	} else if !info.IsOnline && isFresh {
+		// Offline → Online transition.
+		duration = now.Sub(info.LastChange)
+		info.IsOnline = true
+		info.LastChange = now
+		statusChanged = true
+		isNowOnline = true
+	}
+
+	// Capture values for async operations.
+	monitorName := info.Name
+	monitorAddress := info.Address
+	notifyAddress := info.NotifyAddress
+	outageRegion := info.OutageRegion
+	outageGroup := info.OutageGroup
+	notifyOutage := info.NotifyOutage
+	channelID := info.ChannelID
+	info.mu.Unlock()
+
+	if statusChanged {
+		go func() {
+			if err := s.db.UpdateMonitorStatus(context.Background(), monitorID, isNowOnline); err != nil {
+				log.Printf("[heartbeat] failed to update status for monitor %d: %v", monitorID, err)
+			}
+		}()
+
+		if s.notifier != nil && channelID != 0 {
+			when := now
+			if !isNowOnline {
+				when = now.Add(-s.threshold)
+			}
+			go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, monitorAddress, notifyAddress, isNowOnline, duration, when, outageRegion, outageGroup, notifyOutage)
+		}
+
+		if isNowOnline {
+			log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(duration))
+		} else {
+			log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", monitorID, monitorName, database.FormatDuration(duration))
+		}
+	}
 }
 
 // PingHost sends ICMP pings to the target and returns true if reachable.

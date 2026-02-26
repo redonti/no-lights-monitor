@@ -21,7 +21,9 @@ import (
 
 const (
 	// HeartbeatCheckIntervalSec is how often we check for stale heartbeats.
-	HeartbeatCheckIntervalSec = 30
+	HeartbeatCheckIntervalSec = 15
+	// PingCheckIntervalSec is how often we ICMP-ping targets for ping monitors.
+	PingCheckIntervalSec = 60
 )
 
 func main() {
@@ -82,8 +84,9 @@ func main() {
 	defer tgBot.Stop()
 	log.Println("telegram bot started")
 
-	// --- Start heartbeat checker ---
-	go hbService.StartChecker(ctx, HeartbeatCheckIntervalSec)
+	// --- Start heartbeat and ping checkers ---
+	go hbService.StartHeartbeatChecker(ctx, HeartbeatCheckIntervalSec)
+	go hbService.StartPingChecker(ctx, PingCheckIntervalSec)
 
 	// --- Graph updater (hourly) ---
 	graphClient := graph.NewClient(cfg.GraphServiceURL)

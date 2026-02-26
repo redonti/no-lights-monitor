@@ -23,11 +23,6 @@ func (b *Bot) handleCallback(c tele.Context) error {
 
 	action := parts[0]
 
-	// Handle create_type callback (no monitor ID needed).
-	if action == "create_type" {
-		return b.onCreateType(c, parts[1])
-	}
-
 	monitorID, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
 		return c.Respond(&tele.CallbackResponse{Text: msgInvalidMonitor})
@@ -262,7 +257,8 @@ func (b *Bot) onCallbackEditName(c tele.Context, m *models.Monitor) error {
 		EditMonitorID: m.ID,
 	}
 	b.mu.Unlock()
-	return c.Edit(fmt.Sprintf(msgEditNamePrompt, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
+	_ = c.Edit(fmt.Sprintf(msgEditNamePrompt, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
+	return c.Send(fmt.Sprintf(msgEditNamePrompt, html.EscapeString(m.Name)), tele.ModeHTML, removeMenu)
 }
 
 func (b *Bot) onCallbackEditAddress(c tele.Context, m *models.Monitor) error {
@@ -273,7 +269,8 @@ func (b *Bot) onCallbackEditAddress(c tele.Context, m *models.Monitor) error {
 		EditMonitorID: m.ID,
 	}
 	b.mu.Unlock()
-	return c.Edit(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(m.Address)), tele.ModeHTML, &tele.ReplyMarkup{})
+	_ = c.Edit(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(m.Address)), tele.ModeHTML, &tele.ReplyMarkup{})
+	return c.Send(fmt.Sprintf(msgEditAddressPrompt, html.EscapeString(m.Address)), tele.ModeHTML, removeMenu)
 }
 
 func (b *Bot) onCallbackEditChannelRefresh(ctx context.Context, c tele.Context, m *models.Monitor) error {

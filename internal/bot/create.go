@@ -28,30 +28,21 @@ func (b *Bot) handleCreate(c tele.Context) error {
 	b.conversations[c.Sender().ID] = &conversationData{State: stateAwaitingType}
 	b.mu.Unlock()
 
-	keyboard := &tele.ReplyMarkup{InlineKeyboard: [][]tele.InlineButton{
-		{
-			{Text: msgCreateBtnHeartbeat, Data: "create_type:heartbeat"},
-		},
-		{
-			{Text: msgCreateBtnPing, Data: "create_type:ping"},
-		},
-	}}
-
-	return c.Send(msgCreateStep1, tele.ModeHTML, keyboard)
+	return c.Send(msgCreateStep1, tele.ModeHTML, createTypeMenu)
 }
 
-// ── Step 1: Monitor type (callback) ──────────────────────────────────
+// ── Step 1: Monitor type (text) ───────────────────────────────────────
 
-func (b *Bot) onCreateType(c tele.Context, monitorType string) error {
-	b.mu.RLock()
-	conv, exists := b.conversations[c.Sender().ID]
-	b.mu.RUnlock()
-
-	if !exists || conv.State != stateAwaitingType {
-		return c.Respond(&tele.CallbackResponse{Text: msgStartOverRequired})
+func (b *Bot) onCreateType(c tele.Context, conv *conversationData) error {
+	var monitorType string
+	switch c.Text() {
+	case msgCreateBtnHeartbeat:
+		monitorType = "heartbeat"
+	case msgCreateBtnPing:
+		monitorType = "ping"
+	default:
+		return c.Send(msgCreateStep1, tele.ModeHTML, createTypeMenu)
 	}
-
-	_ = c.Respond(&tele.CallbackResponse{})
 
 	b.mu.Lock()
 	conv.MonitorType = monitorType
@@ -262,5 +253,5 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 		)
 	}
 
-	return c.Send(msg, htmlOpts)
+	return c.Send(msg, tele.ModeHTML, mainMenu)
 }

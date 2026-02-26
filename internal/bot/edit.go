@@ -51,7 +51,7 @@ func (b *Bot) onEditName(c tele.Context, conv *conversationData) error {
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
 
-	return c.Send(fmt.Sprintf(msgEditNameDone, html.EscapeString(name)), htmlOpts)
+	return c.Send(fmt.Sprintf(msgEditNameDone, html.EscapeString(name)), tele.ModeHTML, mainMenu)
 }
 
 func (b *Bot) onEditAddress(c tele.Context, conv *conversationData) error {
@@ -95,7 +95,7 @@ func (b *Bot) onEditAddress(c tele.Context, conv *conversationData) error {
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
 
-	return c.Send(fmt.Sprintf(msgEditAddressDone, html.EscapeString(result.DisplayName)), htmlOpts)
+	return c.Send(fmt.Sprintf(msgEditAddressDone, html.EscapeString(result.DisplayName)), tele.ModeHTML, mainMenu)
 }
 
 func (b *Bot) onEditManualAddress(c tele.Context, conv *conversationData) error {
@@ -114,7 +114,7 @@ func (b *Bot) onEditManualAddress(c tele.Context, conv *conversationData) error 
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
 
-	return c.Send(fmt.Sprintf(msgEditAddressDone, html.EscapeString(text)), htmlOpts)
+	return c.Send(fmt.Sprintf(msgEditAddressDone, html.EscapeString(text)), tele.ModeHTML, mainMenu)
 }
 
 // parseCoord parses a trimmed string as a float64 coordinate.

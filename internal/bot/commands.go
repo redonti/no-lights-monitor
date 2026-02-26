@@ -16,7 +16,7 @@ import (
 
 func (b *Bot) handleStart(c tele.Context) error {
 	log.Printf("[bot] /start from user %d (@%s)", c.Sender().ID, c.Sender().Username)
-	return c.Send(msgStart, htmlOpts)
+	return c.Send(msgStart, tele.ModeHTML, mainMenu)
 }
 
 func (b *Bot) handleHelp(c tele.Context) error {
@@ -29,7 +29,7 @@ func (b *Bot) handleCancel(c tele.Context) error {
 	b.mu.Lock()
 	delete(b.conversations, c.Sender().ID)
 	b.mu.Unlock()
-	return c.Send(msgCancelled)
+	return c.Send(msgCancelled, mainMenu)
 }
 
 // ── /stop ────────────────────────────────────────────────────────────

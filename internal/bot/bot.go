@@ -59,6 +59,26 @@ type Bot struct {
 
 var htmlOpts = &tele.SendOptions{ParseMode: tele.ModeHTML}
 
+var removeMenu = &tele.ReplyMarkup{RemoveKeyboard: true}
+
+var createTypeMenu = &tele.ReplyMarkup{
+	ResizeKeyboard:  true,
+	OneTimeKeyboard: true,
+	ReplyKeyboard: [][]tele.ReplyButton{
+		{{Text: msgCreateBtnHeartbeat}},
+		{{Text: msgCreateBtnPing}},
+	},
+}
+
+var mainMenu = &tele.ReplyMarkup{
+	ResizeKeyboard: true,
+	ReplyKeyboard: [][]tele.ReplyButton{
+		{{Text: menuBtnCreate}, {Text: menuBtnInfo}},
+		{{Text: menuBtnEdit}, {Text: menuBtnTest}},
+		{{Text: menuBtnStop}, {Text: menuBtnResume}, {Text: menuBtnDelete}},
+	},
+}
+
 // New creates and configures the Telegram bot.
 func New(token string, db *database.DB, hbSvc *heartbeat.Service, baseURL string) (*Bot, error) {
 	pref := tele.Settings{
@@ -153,10 +173,12 @@ func (b *Bot) handleText(c tele.Context) error {
 	b.mu.RUnlock()
 
 	if !exists || conv.State == stateIdle {
-		return nil
+		return b.handleMenuButton(c)
 	}
 
 	switch conv.State {
+	case stateAwaitingType:
+		return b.onCreateType(c, conv)
 	case stateAwaitingPingTarget:
 		return b.onPingTarget(c, conv)
 	case stateAwaitingAddress:
@@ -171,6 +193,28 @@ func (b *Bot) handleText(c tele.Context) error {
 		return b.onEditAddress(c, conv)
 	case stateAwaitingEditManualAddress:
 		return b.onEditManualAddress(c, conv)
+	}
+	return nil
+}
+
+// ── Menu button handler ──────────────────────────────────────────────
+
+func (b *Bot) handleMenuButton(c tele.Context) error {
+	switch c.Text() {
+	case menuBtnCreate:
+		return b.handleCreate(c)
+	case menuBtnInfo:
+		return b.handleInfo(c)
+	case menuBtnEdit:
+		return b.handleEdit(c)
+	case menuBtnTest:
+		return b.handleTest(c)
+	case menuBtnStop:
+		return b.handleStop(c)
+	case menuBtnResume:
+		return b.handleResume(c)
+	case menuBtnDelete:
+		return b.handleDelete(c)
 	}
 	return nil
 }

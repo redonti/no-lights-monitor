@@ -31,6 +31,15 @@ func (b *Bot) handleCreate(c tele.Context) error {
 	return c.Send(msgCreateStep1, tele.ModeHTML, createTypeMenu)
 }
 
+// ── Back to menu ──────────────────────────────────────────────────────
+
+func (b *Bot) handleBackButton(c tele.Context, conv *conversationData) error {
+	b.mu.Lock()
+	delete(b.conversations, c.Sender().ID)
+	b.mu.Unlock()
+	return c.Send(msgCancelled, mainMenu)
+}
+
 // ── Step 1: Monitor type (text) ───────────────────────────────────────
 
 func (b *Bot) onCreateType(c tele.Context, conv *conversationData) error {
@@ -53,7 +62,7 @@ func (b *Bot) onCreateType(c tele.Context, conv *conversationData) error {
 		conv.State = stateAwaitingPingTarget
 		b.mu.Unlock()
 
-		return c.Send(msgPingTargetStep, htmlOpts)
+		return c.Send(msgPingTargetStep, tele.ModeHTML, backMenu)
 	}
 
 	// Heartbeat — go directly to address step.
@@ -61,7 +70,7 @@ func (b *Bot) onCreateType(c tele.Context, conv *conversationData) error {
 	conv.State = stateAwaitingAddress
 	b.mu.Unlock()
 
-	return c.Send(msgAddressStepHeartbeat, htmlOpts)
+	return c.Send(msgAddressStepHeartbeat, tele.ModeHTML, backMenu)
 }
 
 // ── Step 2 (ping only): Ping target ─────────────────────────────────
@@ -97,7 +106,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 
 	_ = c.Send(fmt.Sprintf(msgPingHostOK, html.EscapeString(target), ips[0]), htmlOpts)
 
-	return c.Send(msgAddressStepPing, htmlOpts)
+	return c.Send(msgAddressStepPing, tele.ModeHTML, backMenu)
 }
 
 // ── Step: Address ────────────────────────────────────────────────────
@@ -118,7 +127,7 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 			conv.Longitude = lng
 			conv.State = stateAwaitingManualAddress
 			b.mu.Unlock()
-			return c.Send(msgManualAddressStep, htmlOpts)
+			return c.Send(msgManualAddressStep, tele.ModeHTML, backMenu)
 		}
 	}
 
@@ -144,7 +153,7 @@ func (b *Bot) onAddress(c tele.Context, conv *conversationData) error {
 	b.mu.Unlock()
 
 	_ = c.Send(fmt.Sprintf(msgAddressFound, html.EscapeString(result.DisplayName)), htmlOpts)
-	return c.Send(b.channelStepMessage(conv), htmlOpts)
+	return c.Send(b.channelStepMessage(conv), tele.ModeHTML, backMenu)
 }
 
 // ── Step: Manual address (after raw coordinates / GPS) ───────────────
@@ -161,7 +170,7 @@ func (b *Bot) onManualAddress(c tele.Context, conv *conversationData) error {
 	conv.State = stateAwaitingChannel
 	b.mu.Unlock()
 
-	return c.Send(b.channelStepMessage(conv), htmlOpts)
+	return c.Send(b.channelStepMessage(conv), tele.ModeHTML, backMenu)
 }
 
 // ── Step: Channel ────────────────────────────────────────────────────

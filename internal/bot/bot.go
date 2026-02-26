@@ -70,6 +70,11 @@ var createTypeMenu = &tele.ReplyMarkup{
 	},
 }
 
+var backMenu = &tele.ReplyMarkup{
+	ResizeKeyboard: true,
+	ReplyKeyboard:  [][]tele.ReplyButton{{{Text: msgBtnBack}}},
+}
+
 var mainMenu = &tele.ReplyMarkup{
 	ResizeKeyboard: true,
 	ReplyKeyboard: [][]tele.ReplyButton{
@@ -176,6 +181,10 @@ func (b *Bot) handleText(c tele.Context) error {
 		return b.handleMenuButton(c)
 	}
 
+	if c.Text() == msgBtnBack {
+		return b.handleBackButton(c, conv)
+	}
+
 	switch conv.State {
 	case stateAwaitingType:
 		return b.onCreateType(c, conv)
@@ -238,7 +247,7 @@ func (b *Bot) handleLocation(c tele.Context) error {
 		conv.Longitude = float64(loc.Lng)
 		conv.State = stateAwaitingManualAddress
 		b.mu.Unlock()
-		return c.Send(msgManualAddressStep, htmlOpts)
+		return c.Send(msgManualAddressStep, tele.ModeHTML, backMenu)
 	}
 
 	if conv.State == stateAwaitingEditAddress {
@@ -247,7 +256,7 @@ func (b *Bot) handleLocation(c tele.Context) error {
 		conv.Longitude = float64(loc.Lng)
 		conv.State = stateAwaitingEditManualAddress
 		b.mu.Unlock()
-		return c.Send(msgManualAddressStep, htmlOpts)
+		return c.Send(msgManualAddressStep, tele.ModeHTML, backMenu)
 	}
 
 	return nil

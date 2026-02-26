@@ -53,7 +53,8 @@ func (n *TelegramNotifier) NotifyStatusChange(monitorID, channelID int64, name, 
 	}
 
 	chat := &tele.Chat{ID: channelID}
-	_, err := n.bot.Send(chat, msg, htmlOpts)
+	opts := &tele.SendOptions{ParseMode: tele.ModeHTML, DisableNotification: IsQuietHour()}
+	_, err := n.bot.Send(chat, msg, opts)
 	if err != nil {
 		ctx := context.Background()
 		ownerID, dbErr := n.db.GetOwnerTelegramIDByMonitorID(ctx, monitorID)
@@ -219,6 +220,13 @@ func findNextRestoration(hours map[string]string, currentHour int) (hour, minute
 		}
 	}
 	return 0, 0, false
+}
+
+// IsQuietHour reports whether the current Kyiv time is between 23:00 and 07:00.
+func IsQuietHour() bool {
+	kyiv, _ := time.LoadLocation("Europe/Kyiv")
+	h := time.Now().In(kyiv).Hour()
+	return h >= 23 || h < 7
 }
 
 // ── Channel error helpers ─────────────────────────────────────────────

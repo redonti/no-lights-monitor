@@ -155,7 +155,7 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, mon
 	}
 
 	chat := &tele.Chat{ID: channelID}
-	silent := &tele.SendOptions{DisableNotification: true}
+	silent := &tele.SendOptions{DisableNotification: bot.IsQuietHour()}
 
 	if needsNewMessage {
 		// Send a brand-new photo message.

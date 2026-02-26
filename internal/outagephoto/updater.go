@@ -139,7 +139,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 
 	// New image received — post or update Telegram.
 	chat := &tele.Chat{ID: m.ChannelID}
-	silent := &tele.SendOptions{DisableNotification: true}
+	sendOpts := &tele.SendOptions{DisableNotification: bot.IsQuietHour()}
 
 	if m.OutagePhotoMessageID != 0 {
 		// Try to edit existing photo in-place.
@@ -176,7 +176,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 	photo := &tele.Photo{
 		File: tele.FromReader(newPNGReader(result.data, filename)),
 	}
-	sent, err := u.bot.Send(chat, photo, silent)
+	sent, err := u.bot.Send(chat, photo, sendOpts)
 	if err != nil {
 		if u.handleChannelError(ctx, m, err) {
 			return nil

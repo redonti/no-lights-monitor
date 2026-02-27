@@ -180,6 +180,71 @@ func (s *Service) RemoveMonitor(token string) {
 	s.monitors.Delete(token)
 }
 
+// refreshMonitors re-reads all monitors from the DB and updates the in-memory map.
+// New monitors are added, deleted monitors are removed, and changed fields are synced.
+func (s *Service) refreshMonitors(ctx context.Context) {
+	monitors, err := s.db.GetAllMonitors(ctx)
+	if err != nil {
+		log.Printf("[heartbeat] refresh monitors error: %v", err)
+		return
+	}
+
+	// Build a set of current DB tokens for deletion detection.
+	dbTokens := make(map[string]struct{}, len(monitors))
+
+	for _, m := range monitors {
+		dbTokens[m.Token] = struct{}{}
+
+		val, ok := s.monitors.Load(m.Token)
+		if !ok {
+			// New monitor — add to map.
+			s.monitors.Store(m.Token, &monitorInfo{
+				ID:            m.ID,
+				ChannelID:     m.ChannelID,
+				Name:          m.Name,
+				Address:       m.Address,
+				Latitude:      m.Latitude,
+				Longitude:     m.Longitude,
+				MonitorType:   m.MonitorType,
+				PingTarget:    m.PingTarget,
+				IsOnline:      m.IsOnline,
+				IsActive:      m.IsActive,
+				NotifyAddress: m.NotifyAddress,
+				OutageRegion:  m.OutageRegion,
+				OutageGroup:   m.OutageGroup,
+				NotifyOutage:  m.NotifyOutage,
+				LastChange:    m.LastStatusChangeAt,
+			})
+			continue
+		}
+
+		// Existing monitor — update mutable fields.
+		info := val.(*monitorInfo)
+		info.mu.Lock()
+		info.Name = m.Name
+		info.Address = m.Address
+		info.Latitude = m.Latitude
+		info.Longitude = m.Longitude
+		info.ChannelID = m.ChannelID
+		info.IsActive = m.IsActive
+		info.NotifyAddress = m.NotifyAddress
+		info.OutageRegion = m.OutageRegion
+		info.OutageGroup = m.OutageGroup
+		info.NotifyOutage = m.NotifyOutage
+		info.PingTarget = m.PingTarget
+		info.mu.Unlock()
+	}
+
+	// Remove monitors that no longer exist in DB.
+	s.monitors.Range(func(key, value any) bool {
+		token := key.(string)
+		if _, exists := dbTokens[token]; !exists {
+			s.monitors.Delete(token)
+		}
+		return true
+	})
+}
+
 // StartHeartbeatChecker runs a background loop that checks heartbeat monitors
 // (devices that send pings to the API) for stale heartbeats.
 func (s *Service) StartHeartbeatChecker(ctx context.Context, intervalSec int) {
@@ -221,6 +286,8 @@ func (s *Service) StartPingChecker(ctx context.Context, intervalSec int) {
 // checkHeartbeatMonitors checks all heartbeat-type monitors for stale heartbeats
 // and triggers status change notifications when needed.
 func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
+	s.refreshMonitors(ctx)
+
 	now := time.Now()
 	inGracePeriod := now.Sub(s.startupTime) < s.threshold
 

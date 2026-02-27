@@ -222,7 +222,7 @@ func (s *Service) StartPingChecker(ctx context.Context, intervalSec int) {
 // and triggers status change notifications when needed.
 func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
 	now := time.Now()
-	inGracePeriod := now.Sub(s.startupTime) < 2*s.threshold
+	inGracePeriod := now.Sub(s.startupTime) < s.threshold
 
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)
@@ -244,7 +244,7 @@ func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
 // ping monitors for status changes.
 func (s *Service) checkPingMonitors(ctx context.Context) {
 	now := time.Now()
-	inGracePeriod := now.Sub(s.startupTime) < 2*s.threshold
+	inGracePeriod := now.Sub(s.startupTime) < s.threshold
 
 	// Phase 1: Execute all ICMP pings concurrently.
 	// This ensures even 100 ping monitors complete within ~5 seconds (ping timeout).
@@ -323,7 +323,11 @@ func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, mon
 		// Online → Offline transition.
 		duration = now.Sub(info.LastChange)
 		info.IsOnline = false
-		info.LastChange = now.Add(-s.threshold)
+		offlineAt := lastHB
+		if offlineAt.IsZero() {
+			offlineAt = now.Add(-s.threshold)
+		}
+		info.LastChange = offlineAt
 		statusChanged = true
 		isNowOnline = false
 	} else if !info.IsOnline && isFresh {
@@ -355,7 +359,7 @@ func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, mon
 		if s.notifier != nil && channelID != 0 {
 			when := now
 			if !isNowOnline {
-				when = now.Add(-s.threshold)
+				when = info.LastChange
 			}
 			go s.notifier.NotifyStatusChange(monitorID, channelID, monitorName, monitorAddress, notifyAddress, isNowOnline, duration, when, outageRegion, outageGroup, notifyOutage)
 		}

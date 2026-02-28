@@ -50,6 +50,7 @@ func main() {
 	// --- Fiber HTTP Server ---
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
+		BodyLimit:             64 * 1024, // 64KB — settings JSON has no business being larger
 	})
 
 	app.Use(logger.New(logger.Config{

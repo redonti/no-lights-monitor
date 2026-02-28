@@ -77,6 +77,13 @@ func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 	})
 }
 
+const (
+	maxNameLen         = 100
+	maxAddressLen      = 300
+	maxOutageRegionLen = 50
+	maxOutageGroupLen  = 100
+)
+
 // settingsUpdateRequest is the JSON body for updating monitor settings.
 type settingsUpdateRequest struct {
 	Name          *string  `json:"name"`
@@ -111,14 +118,14 @@ func (h *Handlers) UpdateSettings(c *fiber.Ctx) error {
 	}
 
 	// Update name.
-	if req.Name != nil && *req.Name != m.Name && len(*req.Name) >= 2 {
+	if req.Name != nil && *req.Name != m.Name && len(*req.Name) >= 2 && len(*req.Name) <= maxNameLen {
 		if err := h.DB.UpdateMonitorName(ctx, m.ID, *req.Name); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update name"})
 		}
 	}
 
 	// Update address — either with provided coordinates or geocode.
-	if req.Address != nil && len(*req.Address) >= 3 {
+	if req.Address != nil && len(*req.Address) >= 3 && len(*req.Address) <= maxAddressLen {
 		lat, lng := m.Latitude, m.Longitude
 		if req.Latitude != nil && req.Longitude != nil {
 			lat, lng = *req.Latitude, *req.Longitude
@@ -150,7 +157,8 @@ func (h *Handlers) UpdateSettings(c *fiber.Ctx) error {
 	}
 
 	// Update outage group.
-	if req.OutageRegion != nil && req.OutageGroup != nil {
+	if req.OutageRegion != nil && req.OutageGroup != nil &&
+		len(*req.OutageRegion) <= maxOutageRegionLen && len(*req.OutageGroup) <= maxOutageGroupLen {
 		if *req.OutageRegion != m.OutageRegion || *req.OutageGroup != m.OutageGroup {
 			if err := h.DB.SetMonitorOutageGroup(ctx, m.ID, *req.OutageRegion, *req.OutageGroup); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update outage group"})

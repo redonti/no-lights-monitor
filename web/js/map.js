@@ -27,7 +27,7 @@ L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
 map.invalidateSize();
 setTimeout(() => map.invalidateSize(), 200);
 
-// --- Marker management ---
+// --- Single cluster group for all markers (own + svitlobot) ---
 const markers = {};
 const clusterGroup = L.markerClusterGroup({
   maxClusterRadius: 50,
@@ -180,17 +180,7 @@ function updateStats(total, online, offline) {
 
 // --- Svitlobot integration ---
 const SVITLOBOT_API = 'https://api.svitlobot.in.ua/website/getChannelsForMap';
-const svitlobotClusterGroup = L.markerClusterGroup({
-  maxClusterRadius: 50,
-  spiderfyOnMaxZoom: false,
-  showCoverageOnHover: false,
-  disableClusteringAtZoom: 14,
-  animate: true,
-  chunkedLoading: true,
-  iconCreateFunction: createClusterIcon,
-});
 let svitlobotVisible = document.getElementById('toggle-svitlobot').checked;
-if (svitlobotVisible) map.addLayer(svitlobotClusterGroup);
 let svitlobotActiveMarkers = {}; // currently visible markers by id
 
 // --- Spatial grid index ---
@@ -358,8 +348,8 @@ function renderSvitlobotViewport() {
     }
   }
 
-  if (toRemove.length) svitlobotClusterGroup.removeLayers(toRemove);
-  if (toAdd.length) svitlobotClusterGroup.addLayers(toAdd);
+  if (toRemove.length) clusterGroup.removeLayers(toRemove);
+  if (toAdd.length) clusterGroup.addLayers(toAdd);
   svitlobotActiveMarkers = newActive;
 }
 
@@ -385,8 +375,8 @@ async function loadSvitlobot() {
     }
     updateSvitlobotStats(allPoints.length, sbOnline, sbOffline);
 
-    // Clear old markers and render for current viewport.
-    svitlobotClusterGroup.clearLayers();
+    // Clear old svitlobot markers and render for current viewport.
+    clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
     svitlobotActiveMarkers = {};
     renderSvitlobotViewport();
   } catch (e) {
@@ -420,12 +410,12 @@ function updateSvitlobotStats(total, online, offline) {
 document.getElementById('toggle-svitlobot').addEventListener('change', function () {
   svitlobotVisible = this.checked;
   if (svitlobotVisible) {
-    map.addLayer(svitlobotClusterGroup);
     renderSvitlobotViewport();
     const badge = document.getElementById('svitlobot-stats');
     if (badge) badge.style.display = '';
   } else {
-    map.removeLayer(svitlobotClusterGroup);
+    clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
+    svitlobotActiveMarkers = {};
     const badge = document.getElementById('svitlobot-stats');
     if (badge) badge.style.display = 'none';
   }

@@ -10,16 +10,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
-        }
-      }
-    }
-  </script>
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
   <style>
     body { margin: 0; overflow: hidden; }
     #map { width: 100vw; height: 100vh; }
@@ -59,6 +51,6 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="/js/map.js"></script>
   <script data-goatcounter="https://lightmonitor.goatcounter.com/count"
-          async src="//gc.zgo.at/count.js"></script>
+          async src="/js/count.js"></script>
 </body>
 </html>

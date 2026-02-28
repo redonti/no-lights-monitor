@@ -7,16 +7,8 @@
   <link rel="icon" href="/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
-        }
-      }
-    }
-  </script>
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
 </head>
 <body class="bg-stone-100 text-stone-900 leading-relaxed">
 
@@ -28,7 +20,7 @@
   </header>
 
   <section class="pt-10 pb-14 max-sm:pt-8 max-sm:pb-9">
-    <div class="max-w-6xl mx-auto px-5">
+    <div class="px-5 mx-auto" style="max-width: 1400px">
       <h1 class="text-2xl font-bold tracking-tight mb-6">Admin Panel</h1>
 
       <!-- Monitors -->
@@ -39,14 +31,18 @@
           <table class="w-full text-sm bg-white border border-stone-200 rounded-xl overflow-hidden">
             <thead class="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
               <tr>
-                <th class="text-left px-4 py-2.5">ID</th>
+                <th class="text-center px-4 py-2.5">ID</th>
+                <th class="text-center px-4 py-2.5">User ID</th>
                 <th class="text-left px-4 py-2.5">Name</th>
                 <th class="text-left px-4 py-2.5">Address</th>
-                <th class="text-left px-4 py-2.5">Status</th>
-                <th class="text-left px-4 py-2.5">Active</th>
-                <th class="text-left px-4 py-2.5">Type</th>
+                <th class="text-left px-4 py-2.5">Ping target</th>
+                <th class="text-center px-4 py-2.5">Status</th>
+                <th class="text-center px-4 py-2.5">Active</th>
+                <th class="text-center px-4 py-2.5">Public</th>
+                <th class="text-center px-4 py-2.5">Type</th>
                 <th class="text-left px-4 py-2.5">Channel</th>
-                <th class="text-left px-4 py-2.5">Last heartbeat</th>
+                <th class="text-right px-4 py-2.5">Last heartbeat</th>
+                <th class="text-right px-4 py-2.5">Created</th>
               </tr>
             </thead>
             <tbody id="monitors-body" class="divide-y divide-stone-100"></tbody>
@@ -62,11 +58,11 @@
           <table class="w-full text-sm bg-white border border-stone-200 rounded-xl overflow-hidden">
             <thead class="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
               <tr>
-                <th class="text-left px-4 py-2.5">ID</th>
-                <th class="text-left px-4 py-2.5">Telegram ID</th>
+                <th class="text-center px-4 py-2.5">ID</th>
+                <th class="text-center px-4 py-2.5">Telegram ID</th>
                 <th class="text-left px-4 py-2.5">Username</th>
                 <th class="text-left px-4 py-2.5">First name</th>
-                <th class="text-left px-4 py-2.5">Registered</th>
+                <th class="text-right px-4 py-2.5">Registered</th>
               </tr>
             </thead>
             <tbody id="users-body" class="divide-y divide-stone-100"></tbody>
@@ -91,18 +87,22 @@
         document.getElementById('monitors-count').textContent = `(${monitors.length})`;
         const tbody = document.getElementById('monitors-body');
         tbody.innerHTML = monitors.map(m => `
-          <tr class="hover:bg-stone-50">
-            <td class="px-4 py-2.5 text-stone-400">${m.id} <a href="/settings/${m.settings_token}">link</a></td>
+          <tr class="hover:bg-stone-50 ${!m.is_active ? 'opacity-40' : ''}">
+            <td class="px-4 py-2.5 text-center text-stone-400">${m.id} <a href="/settings/${m.settings_token}">↗</a></td>
+            <td class="px-4 py-2.5 text-center text-stone-400">${m.user_id}</td>
             <td class="px-4 py-2.5 font-medium">${m.name}</td>
             <td class="px-4 py-2.5 text-stone-500">${m.address}</td>
-            <td class="px-4 py-2.5">
+            <td class="px-4 py-2.5 text-stone-500">${m.ping_target || '—'}</td>
+            <td class="px-4 py-2.5 text-center">
               <span class="inline-block w-2 h-2 rounded-full mr-1.5 ${m.is_online ? 'bg-green-500' : 'bg-red-500'}"></span>
               ${m.is_online ? 'Online' : 'Offline'}
             </td>
-            <td class="px-4 py-2.5 ${m.is_active ? 'text-stone-900' : 'text-stone-400'}">${m.is_active ? 'Yes' : 'Paused'}</td>
-            <td class="px-4 py-2.5 text-stone-500">${m.monitor_type}</td>
+            <td class="px-4 py-2.5 text-center ${m.is_active ? 'text-stone-900' : 'text-stone-400'}">${m.is_active ? 'Yes' : 'Paused'}</td>
+            <td class="px-4 py-2.5 text-center ${m.is_public ? 'text-stone-900' : 'text-stone-400'}">${m.is_public ? 'Yes' : 'No'}</td>
+            <td class="px-4 py-2.5 text-center text-stone-500">${m.monitor_type}</td>
             <td class="px-4 py-2.5 text-stone-500">${m.channel_name || '—'}</td>
-            <td class="px-4 py-2.5 text-stone-400">${formatDate(m.last_heartbeat_at)}</td>
+            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(m.last_heartbeat_at)}</td>
+            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(m.created_at)}</td>
           </tr>
         `).join('');
         document.getElementById('monitors-loading').classList.add('hidden');
@@ -120,11 +120,11 @@
         const tbody = document.getElementById('users-body');
         tbody.innerHTML = users.map(u => `
           <tr class="hover:bg-stone-50">
-            <td class="px-4 py-2.5 text-stone-400">${u.id}</td>
-            <td class="px-4 py-2.5 text-stone-500">${u.telegram_id}</td>
+            <td class="px-4 py-2.5 text-center text-stone-400">${u.id}</td>
+            <td class="px-4 py-2.5 text-center text-stone-500">${u.telegram_id}</td>
             <td class="px-4 py-2.5 font-medium">${u.username ? '@' + u.username : '—'}</td>
             <td class="px-4 py-2.5">${u.first_name || '—'}</td>
-            <td class="px-4 py-2.5 text-stone-400">${formatDate(u.created_at)}</td>
+            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(u.created_at)}</td>
           </tr>
         `).join('');
         document.getElementById('users-loading').classList.add('hidden');

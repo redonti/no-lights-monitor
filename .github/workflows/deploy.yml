@@ -23,6 +23,9 @@ jobs:
           - name: worker
             dockerfile: Dockerfile.worker
             context: .
+          - name: bot
+            dockerfile: Dockerfile.bot
+            context: .
           - name: graph-service
             dockerfile: graph-service/Dockerfile
             context: ./graph-service

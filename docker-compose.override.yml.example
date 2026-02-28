@@ -1,0 +1,34 @@
+services:
+  nginx:
+    # Disable nginx completely locally, as we don't need SSL/domains
+    profiles:
+      - "do_not_start"
+    logging:
+      driver: "json-file"
+  graph-service:
+    logging:
+      driver: "json-file"
+  postgres:
+    logging:
+      driver: "json-file"
+  redis:
+    logging:
+      driver: "json-file"
+  api:
+    logging:
+      driver: "json-file"
+    ports:
+      # Use port 8081 on host since 8080 is already occupied
+      - "8081:8080"
+  rabbitmq:
+    logging:
+      driver: "json-file"
+  worker:
+    logging:
+      driver: "json-file"
+  bot:
+    logging:
+      driver: "json-file"
+  outage:
+    logging:
+      driver: "json-file"

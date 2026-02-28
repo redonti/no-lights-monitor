@@ -95,7 +95,23 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # Worker Service - Telegram bot + background jobs (heartbeat checker, graph updater)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: nolights-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-nolights}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-changeme}
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-rabbitmq
+
+  # Worker Service - Heartbeat monitoring + background image generation
   worker:
     image: ghcr.io/redonti/no-lights-monitor/worker:latest
     build:
@@ -108,22 +124,46 @@ services:
       TZ: Europe/Kyiv
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
-      BOT_TOKEN: ${BOT_TOKEN}
-      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-nolights}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
       GRAPH_SERVICE_URL: http://graph-service:8000
-      OUTAGE_SERVICE_URL: http://outage:8090
       OFFLINE_THRESHOLD: ${OFFLINE_THRESHOLD:-300}
       PING_INTERVAL: ${PING_INTERVAL:-300}
     depends_on:
       - postgres
       - redis
+      - rabbitmq
       - graph-service
-      - outage
     restart: unless-stopped
     logging:
       driver: journald
       options:
         tag: nolights-worker
+
+  # Bot Service - Telegram bot + message sending
+  bot:
+    image: ghcr.io/redonti/no-lights-monitor/bot:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: nolights-bot
+    cap_add:
+      - NET_RAW
+    environment:
+      TZ: Europe/Kyiv
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-nolights}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
+      BOT_TOKEN: ${BOT_TOKEN}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      OUTAGE_SERVICE_URL: http://outage:8090
+    depends_on:
+      - postgres
+      - rabbitmq
+      - outage
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-bot
 
   # Outage Service - Fetches and serves power outage schedule data (internal only)
   outage:
@@ -147,3 +187,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  rabbitmqdata:

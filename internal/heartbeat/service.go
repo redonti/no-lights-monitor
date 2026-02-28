@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	probing "github.com/prometheus-community/pro-bing"
 	"github.com/redis/go-redis/v9"
 
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/models"
+	"no-lights-monitor/internal/ping"
 )
 
 // Notifier sends Telegram messages on status changes.
@@ -330,7 +330,7 @@ func (s *Service) checkPingMonitors(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if s.PingHost(pingTarget) {
+			if ping.PingHost(pingTarget) {
 				if err := s.cache.SetHeartbeat(ctx, monitorID, now); err != nil {
 					log.Printf("[heartbeat] redis set error for ping monitor %d: %v", monitorID, err)
 				}
@@ -439,18 +439,3 @@ func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, mon
 	}
 }
 
-// PingHost sends ICMP pings to the target and returns true if reachable.
-func (s *Service) PingHost(target string) bool {
-	pinger, err := probing.NewPinger(target)
-	if err != nil {
-		log.Printf("[heartbeat] failed to create pinger for %s: %v", target, err)
-		return false
-	}
-	pinger.Count = 3
-	pinger.Timeout = 5 * time.Second
-	pinger.SetPrivileged(true) // required in Docker (raw ICMP sockets)
-	if err := pinger.Run(); err != nil {
-		return false
-	}
-	return pinger.Statistics().PacketsRecv > 0
-}

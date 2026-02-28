@@ -37,7 +37,13 @@ cp .env.example .env
 # This builds and runs all Go and Python microservices along with Postgres & Redis
 docker compose up -d --build
 ```
-For local dev, you can just run `docker compose up -d postgres redis` and manually run the services.
+
+**For local development:**
+The default `docker-compose.yml` uses the `journald` logging driver and runs Nginx with SSL, which is intended for production Linux servers. To run locally without errors:
+1. Copy the override example: `cp docker-compose.override.yml.example docker-compose.override.yml`
+2. Run normally: `docker compose up -d --build`
+
+This override disables Nginx, switches logging to `json-file`, and exposes the API on port `8081` instead of `8080` to avoid conflicts. Remember to set `BASE_URL=http://YOUR_LOCAL_IP:8081` in your `.env` file to test on your local network!
 
 ### 3. Register a monitor via Telegram
 

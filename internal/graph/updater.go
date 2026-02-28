@@ -1,42 +1,46 @@
 package graph
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"strings"
 	"time"
 
-	tele "gopkg.in/telebot.v3"
+	amqp "github.com/rabbitmq/amqp091-go"
 
-	"no-lights-monitor/internal/bot"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/models"
+	"no-lights-monitor/internal/mq"
 )
 
-// Updater is a background service that creates / updates weekly graph
-// images in each monitor's Telegram channel.
+// Updater is a background service that generates weekly graph images
+// and publishes them to RabbitMQ for the bot service to send to Telegram.
 type Updater struct {
 	db     *database.DB
 	client *Client
-	bot    *tele.Bot
+	pub    *mq.Publisher
 }
 
 // NewUpdater creates a graph updater.
-func NewUpdater(db *database.DB, client *Client, bot *tele.Bot) *Updater {
-	return &Updater{db: db, client: client, bot: bot}
+func NewUpdater(db *database.DB, client *Client, pub *mq.Publisher) *Updater {
+	return &Updater{db: db, client: client, pub: pub}
 }
 
-// Start runs the hourly update loop. It fires once immediately, then every hour.
-func (u *Updater) Start(ctx context.Context) {
+// Start runs the hourly update loop and listens for on-demand graph requests.
+func (u *Updater) Start(ctx context.Context, consumer *mq.Consumer) {
 	log.Println("[graph] updater started, waiting 30s for graph-service")
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(30 * time.Second):
 	}
+
+	// Listen for on-demand graph requests from the bot service.
+	if consumer != nil {
+		go u.listenRequests(ctx, consumer)
+	}
+
 	log.Println("[graph] running initial pass")
 	u.runAll(ctx)
 
@@ -54,6 +58,39 @@ func (u *Updater) Start(ctx context.Context) {
 	}
 }
 
+// listenRequests consumes graph request messages from the bot and generates graphs on-demand.
+func (u *Updater) listenRequests(ctx context.Context, consumer *mq.Consumer) {
+	deliveries, err := consumer.Consume(mq.QueueGraphRequest)
+	if err != nil {
+		log.Printf("[graph] failed to consume graph requests: %v", err)
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case d, ok := <-deliveries:
+			if !ok {
+				return
+			}
+			u.handleRequest(ctx, d)
+		}
+	}
+}
+
+func (u *Updater) handleRequest(ctx context.Context, d amqp.Delivery) {
+	var msg mq.GraphRequestMsg
+	if err := json.Unmarshal(d.Body, &msg); err != nil {
+		log.Printf("[graph] bad graph request: %v", err)
+		d.Nack(false, false)
+		return
+	}
+	if err := u.UpdateSingle(ctx, msg.MonitorID, msg.ChannelID); err != nil {
+		log.Printf("[graph] on-demand graph for monitor %d failed: %v", msg.MonitorID, err)
+	}
+	d.Ack(false)
+}
+
 // currentWeekStart returns Monday 00:00 UTC for the week containing t.
 func currentWeekStart(t time.Time) time.Time {
 	t = t.UTC()
@@ -65,13 +102,11 @@ func currentWeekStart(t time.Time) time.Time {
 	return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// UpdateSingle generates and sends/edits the graph for a single monitor.
-// This is called externally (e.g., when a new monitor is created).
+// UpdateSingle generates and publishes the graph for a single monitor.
 func (u *Updater) UpdateSingle(ctx context.Context, monitorID, channelID int64) error {
 	now := time.Now().UTC()
 	weekStart := currentWeekStart(now)
 
-	// Fetch the current graph state from the DB.
 	monitors, err := u.db.GetMonitorsWithChannels(ctx)
 	if err != nil {
 		return err
@@ -110,21 +145,8 @@ func (u *Updater) runAll(ctx context.Context) {
 	}
 }
 
-// handleChannelError queries the monitor owner and delegates to bot.NotifyChannelError.
-// Returns true if the error was a channel access error and was handled.
-func (u *Updater) handleChannelError(ctx context.Context, monitorID int64, monitorName string, err error) bool {
-	ownerID, dbErr := u.db.GetOwnerTelegramIDByMonitorID(ctx, monitorID)
-	if dbErr != nil {
-		log.Printf("[graph] failed to get owner for monitor %d: %v", monitorID, dbErr)
-		return false
-	}
-	monitor := &models.Monitor{ID: monitorID, Name: monitorName}
-	return bot.NotifyChannelError(ctx, u.bot, u.db, err, ownerID, monitor)
-}
-
-// updateOne generates a graph PNG and sends or edits it in the channel.
+// updateOne generates a graph PNG and publishes a message for the bot service.
 func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, monitorName, monitorAddress string, notifyAddress bool, oldMsgID int, oldWeekStart *time.Time, weekStart, now time.Time) error {
-	// Determine if we need a new message (new week or first graph).
 	needsNewMessage := oldMsgID == 0 || oldWeekStart == nil || !oldWeekStart.Equal(weekStart)
 
 	caption := fmt.Sprintf("📊 Тижневий графік (від %s)", weekStart.Format("02.01.2006"))
@@ -138,8 +160,6 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, mon
 		return fmt.Errorf("fetch events: %w", err)
 	}
 
-	// Prepend the last known event before week_start so the graph knows the
-	// initial state for Monday regardless of when that event occurred.
 	anchor, err := u.db.GetLastEventBefore(ctx, monitorID, weekStart)
 	if err != nil {
 		return fmt.Errorf("fetch anchor event: %w", err)
@@ -154,80 +174,23 @@ func (u *Updater) updateOne(ctx context.Context, monitorID, channelID int64, mon
 		return fmt.Errorf("generate graph: %w", err)
 	}
 
-	chat := &tele.Chat{ID: channelID}
-	silent := &tele.SendOptions{DisableNotification: bot.IsQuietHour()}
-
-	if needsNewMessage {
-		// Send a brand-new photo message.
-		photo := &tele.Photo{
-			File:    tele.FromReader(pngReader(png)),
-			Caption: caption,
-		}
-		sent, err := u.bot.Send(chat, photo, silent)
-		if err != nil {
-			if u.handleChannelError(ctx, monitorID, monitorName, err) {
-				return nil
-			}
-			return fmt.Errorf("send photo: %w", err)
-		}
-		// Store the message ID so we can edit it later.
-		if err := u.db.UpdateGraphMessage(ctx, monitorID, sent.ID, weekStart); err != nil {
-			return fmt.Errorf("save message id: %w", err)
-		}
-		log.Printf("[graph] monitor %d: sent new graph (msg %d) for week %s", monitorID, sent.ID, weekStart.Format("2006-01-02"))
-	} else {
-		// Edit the existing photo in-place.
-		editPhoto := &tele.Photo{
-			File:    tele.FromReader(pngReader(png)),
-			Caption: caption,
-		}
-		editMsg := &tele.Message{
-			ID:   oldMsgID,
-			Chat: chat,
-		}
-		_, err := u.bot.EditMedia(editMsg, editPhoto)
-		if err != nil {
-			// "message is not modified" means the image is identical — not a real error.
-			if strings.Contains(err.Error(), "message is not modified") {
-				log.Printf("[graph] monitor %d: graph unchanged (msg %d)", monitorID, oldMsgID)
-				return nil
-			}
-			// Channel is gone — pause and notify owner, skip fallback send.
-			if u.handleChannelError(ctx, monitorID, monitorName, err) {
-				return nil
-			}
-			// If edit fails for another reason (message deleted, etc.), send a new one.
-			log.Printf("[graph] monitor %d: edit failed (%v), sending new message", monitorID, err)
-			fallbackPhoto := &tele.Photo{
-				File:    tele.FromReader(pngReader(png)),
-				Caption: caption,
-			}
-			sent, sendErr := u.bot.Send(chat, fallbackPhoto, silent)
-			if sendErr != nil {
-				if u.handleChannelError(ctx, monitorID, monitorName, sendErr) {
-					return nil
-				}
-				return fmt.Errorf("send fallback photo: %w", sendErr)
-			}
-			if err := u.db.UpdateGraphMessage(ctx, monitorID, sent.ID, weekStart); err != nil {
-				return fmt.Errorf("save message id: %w", err)
-			}
-			log.Printf("[graph] monitor %d: sent fallback graph (msg %d)", monitorID, sent.ID)
-		} else {
-			log.Printf("[graph] monitor %d: updated graph (msg %d)", monitorID, oldMsgID)
-		}
+	// Publish to RabbitMQ for the bot service to send to Telegram.
+	msg := mq.GraphReadyMsg{
+		MonitorID:      monitorID,
+		ChannelID:      channelID,
+		MonitorName:    monitorName,
+		MonitorAddress: monitorAddress,
+		NotifyAddress:  notifyAddress,
+		WeekStart:      weekStart,
+		OldMsgID:       oldMsgID,
+		NeedsNewMsg:    needsNewMessage,
+		ImagePNG:       png,
+		Caption:        caption,
 	}
+	if err := u.pub.Publish(ctx, mq.RoutingGraphReady, msg); err != nil {
+		return fmt.Errorf("publish graph: %w", err)
+	}
+
+	log.Printf("[graph] monitor %d: published graph for week %s (new=%v)", monitorID, weekStart.Format("2006-01-02"), needsNewMessage)
 	return nil
-}
-
-// namedReader wraps an io.Reader and adds a Name() so telebot can use it as a file.
-type namedReader struct {
-	io.Reader
-	name string
-}
-
-func (nr *namedReader) Name() string { return nr.name }
-
-func pngReader(data []byte) *namedReader {
-	return &namedReader{Reader: bytes.NewReader(data), name: "graph.png"}
 }

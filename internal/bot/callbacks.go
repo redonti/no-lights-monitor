@@ -96,7 +96,6 @@ func (b *Bot) onCallbackStop(ctx context.Context, c tele.Context, m *models.Moni
 		log.Printf("[bot] set monitor inactive error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgStopError})
 	}
-	b.heartbeatSvc.SetMonitorActive(m.Token, false)
 	if m.ChannelID != 0 {
 		if _, err := b.bot.Send(&tele.Chat{ID: m.ChannelID}, msgChannelPaused, htmlOpts); err != nil {
 			log.Printf("[bot] failed to send pause notice to channel %d: %v", m.ChannelID, err)
@@ -121,7 +120,6 @@ func (b *Bot) onCallbackResume(ctx context.Context, c tele.Context, m *models.Mo
 		log.Printf("[bot] set monitor active error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgResumeError})
 	}
-	b.heartbeatSvc.SetMonitorActive(m.Token, true)
 	if m.ChannelID != 0 {
 		if _, err := b.bot.Send(&tele.Chat{ID: m.ChannelID}, msgChannelResumed, htmlOpts); err != nil {
 			log.Printf("[bot] failed to send resume notice to channel %d: %v", m.ChannelID, err)
@@ -136,7 +134,6 @@ func (b *Bot) onCallbackDelete(ctx context.Context, c tele.Context, m *models.Mo
 		log.Printf("[bot] delete monitor error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgDeleteError})
 	}
-	b.heartbeatSvc.RemoveMonitor(m.Token)
 	_ = c.Respond(&tele.CallbackResponse{Text: msgDeleteOK})
 	return c.Edit(fmt.Sprintf(msgDeleteDone, msgDeleteOK, html.EscapeString(m.Name)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
@@ -297,8 +294,6 @@ func (b *Bot) onCallbackEditNotifyAddress(ctx context.Context, c tele.Context, m
 		log.Printf("[bot] set notify_address error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgNotifyAddressError})
 	}
-	// Update in-memory state in heartbeat service.
-	b.heartbeatSvc.SetMonitorNotifyAddress(m.Token, newVal)
 	_ = c.Respond(&tele.CallbackResponse{})
 	m.NotifyAddress = newVal
 	return b.renderEditMenu(c, m)
@@ -365,12 +360,10 @@ func (b *Bot) onCallbackOutageGroup(ctx context.Context, c tele.Context, parts [
 		log.Printf("[bot] set outage group error: %v", err)
 		return c.Edit(msgError, tele.ModeHTML, &tele.ReplyMarkup{})
 	}
-	b.heartbeatSvc.SetMonitorOutageGroup(m.Token, region, group)
 	// Auto-enable notify_outage when setting a group.
 	if err := b.db.SetMonitorNotifyOutage(ctx, m.ID, true); err != nil {
 		log.Printf("[bot] set notify_outage error: %v", err)
 	}
-	b.heartbeatSvc.SetMonitorNotifyOutage(m.Token, true)
 	return c.Edit(fmt.Sprintf(msgOutageGroupSet, html.EscapeString(group), html.EscapeString(region)), tele.ModeHTML, &tele.ReplyMarkup{})
 }
 
@@ -380,7 +373,6 @@ func (b *Bot) onCallbackEditNotifyOutage(ctx context.Context, c tele.Context, m 
 		log.Printf("[bot] set notify_outage error: %v", err)
 		return c.Respond(&tele.CallbackResponse{Text: msgNotifyOutageError})
 	}
-	b.heartbeatSvc.SetMonitorNotifyOutage(m.Token, newVal)
 	_ = c.Respond(&tele.CallbackResponse{})
 	m.NotifyOutage = newVal
 	return b.renderEditMenu(c, m)

@@ -27,6 +27,7 @@ type Config struct {
 	AdminPassword       string
 	OutageFetchInterval int    // seconds between outage data fetches
 	OutageServiceURL    string // URL of the outage data service
+	RabbitMQURL         string // AMQP connection URL for RabbitMQ
 }
 
 func Load() *Config {
@@ -43,6 +44,7 @@ func Load() *Config {
 		AdminPassword:       getEnv("ADMIN_PASSWORD", ""),
 		OutageFetchInterval: getEnvInt("OUTAGE_FETCH_INTERVAL", DefaultOutageFetchIntervalSec),
 		OutageServiceURL:    getEnv("OUTAGE_SERVICE_URL", "http://localhost:8090"),
+		RabbitMQURL:         getEnv("RABBITMQ_URL", "amqp://nolights:changeme@localhost:5672/"),
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"no-lights-monitor/internal/database"
-	"no-lights-monitor/internal/heartbeat"
 	"no-lights-monitor/internal/outage"
 
 	tele "gopkg.in/telebot.v3"
@@ -49,7 +48,7 @@ type GraphUpdater interface {
 type Bot struct {
 	bot           *tele.Bot
 	db            *database.DB
-	heartbeatSvc  *heartbeat.Service
+	pingHost      func(string) bool
 	baseURL       string
 	graphUpdater  GraphUpdater
 	outageClient  *outage.Client
@@ -85,7 +84,7 @@ var mainMenu = &tele.ReplyMarkup{
 }
 
 // New creates and configures the Telegram bot.
-func New(token string, db *database.DB, hbSvc *heartbeat.Service, baseURL string) (*Bot, error) {
+func New(token string, db *database.DB, pingHost func(string) bool, baseURL string) (*Bot, error) {
 	pref := tele.Settings{
 		Token:  token,
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
@@ -99,7 +98,7 @@ func New(token string, db *database.DB, hbSvc *heartbeat.Service, baseURL string
 	bot := &Bot{
 		bot:           b,
 		db:            db,
-		heartbeatSvc:  hbSvc,
+		pingHost:      pingHost,
 		baseURL:       baseURL,
 		conversations: make(map[int64]*conversationData),
 	}

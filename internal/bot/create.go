@@ -95,7 +95,7 @@ func (b *Bot) onPingTarget(c tele.Context, conv *conversationData) error {
 
 	// Test ICMP ping to verify the host is reachable.
 	_ = c.Send(fmt.Sprintf(msgPingChecking, html.EscapeString(target)), htmlOpts)
-	if !b.heartbeatSvc.PingHost(target) {
+	if !b.pingHost(target) {
 		return c.Send(fmt.Sprintf(msgPingHostUnreachable, html.EscapeString(target)), htmlOpts)
 	}
 
@@ -227,7 +227,6 @@ func (b *Bot) onChannel(c tele.Context, conv *conversationData) error {
 		return c.Send(msgErrorRetry)
 	}
 
-	b.heartbeatSvc.RegisterMonitor(monitor)
 	log.Printf("[bot] monitor created: id=%d type=%s name=%q user=%d (@%s)", monitor.ID, monitorType, monitor.Name, c.Sender().ID, c.Sender().Username)
 
 	// Trigger initial weekly graph in the channel.

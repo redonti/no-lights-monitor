@@ -15,7 +15,7 @@ import (
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
-	"no-lights-monitor/internal/handlers"
+	"no-lights-monitor/cmd/api/handlers"
 )
 
 func main() {

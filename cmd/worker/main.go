@@ -12,10 +12,10 @@ import (
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
-	"no-lights-monitor/internal/graph"
-	"no-lights-monitor/internal/heartbeat"
+	"no-lights-monitor/cmd/worker/graph"
+	"no-lights-monitor/cmd/worker/heartbeat"
 	"no-lights-monitor/internal/mq"
-	"no-lights-monitor/internal/outagephoto"
+	"no-lights-monitor/cmd/worker/outagephoto"
 )
 
 const (

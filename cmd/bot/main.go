@@ -9,7 +9,7 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"no-lights-monitor/internal/bot"
+	"no-lights-monitor/cmd/bot/bot"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/mq"

@@ -9,29 +9,55 @@ env:
   IMAGE_PREFIX: ghcr.io/redonti/no-lights-monitor
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'cmd/api/**'
+              - 'internal/**'
+              - 'web/**'
+              - 'Dockerfile.api'
+              - 'go.mod'
+              - 'go.sum'
+            worker:
+              - 'cmd/worker/**'
+              - 'internal/**'
+              - 'Dockerfile.worker'
+              - 'go.mod'
+              - 'go.sum'
+            bot:
+              - 'cmd/bot/**'
+              - 'internal/**'
+              - 'Dockerfile.bot'
+              - 'go.mod'
+              - 'go.sum'
+            outage:
+              - 'cmd/outage/**'
+              - 'internal/**'
+              - 'Dockerfile.outage'
+              - 'go.mod'
+              - 'go.sum'
+            graph-service:
+              - 'graph-service/**'
+
   build:
+    needs: changes
+    if: ${{ needs.changes.outputs.services != '[]' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        include:
-          - name: api
-            dockerfile: Dockerfile.api
-            context: .
-          - name: worker
-            dockerfile: Dockerfile.worker
-            context: .
-          - name: bot
-            dockerfile: Dockerfile.bot
-            context: .
-          - name: graph-service
-            dockerfile: graph-service/Dockerfile
-            context: ./graph-service
-          - name: outage
-            dockerfile: Dockerfile.outage
-            context: .
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,14 +67,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set build context
+        id: ctx
+        run: |
+          case "${{ matrix.service }}" in
+            graph-service)
+              echo "dockerfile=graph-service/Dockerfile" >> $GITHUB_OUTPUT
+              echo "context=./graph-service" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "dockerfile=Dockerfile.${{ matrix.service }}" >> $GITHUB_OUTPUT
+              echo "context=." >> $GITHUB_OUTPUT
+              ;;
+          esac
+
       - uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.dockerfile }}
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:latest
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest

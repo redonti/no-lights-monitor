@@ -11,7 +11,7 @@ import (
 
 	tele "gopkg.in/telebot.v3"
 
-	"no-lights-monitor/internal/bot"
+	"no-lights-monitor/cmd/bot/bot"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/models"
 	"no-lights-monitor/internal/mq"

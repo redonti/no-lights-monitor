@@ -1,4 +1,4 @@
-# DTEK Outage Service
+# DTEK Outage Service(shutdown msg checker)
 
 HTTP service with two endpoints: outage status check and address autocomplete. It keeps a persistent Playwright browser with pre-loaded tabs — one per region — so outage requests get a fast AJAX call instead of a cold browser launch. The suggest endpoint drives DTEK's form UI directly to resolve city/street/house names.
 

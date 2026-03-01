@@ -223,7 +223,9 @@ func (l *listener) editPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 
 func (l *listener) sendPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 	chat := &tele.Chat{ID: msg.ChannelID}
-	sendOpts := &tele.SendOptions{DisableNotification: bot.IsQuietHour()}
+	quiet := bot.IsQuietHour()
+	log.Printf("[listener] outage_photo monitor %d: sendPhoto quiet=%v", msg.MonitorID, quiet)
+	sendOpts := &tele.SendOptions{DisableNotification: quiet}
 	photo := &tele.Photo{
 		File: tele.FromReader(namedReader(msg.ImageData, msg.Filename)),
 	}

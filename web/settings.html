@@ -8,7 +8,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/tailwind.css" />
-  <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    @keyframes dtek-spin { to { transform: rotate(360deg); } }
+    .dtek-spinner { position:absolute; right:8px; top:calc(50% - 8px); width:16px; height:16px; border:2px solid #e7e5e4; border-top-color:#a8a29e; border-radius:50%; animation:dtek-spin 0.7s linear infinite; pointer-events:none; }
+  </style>
 </head>
 <body class="bg-stone-100 text-stone-900 leading-relaxed">
 
@@ -156,7 +160,7 @@
               <input id="dtek-city-input" type="text" oninput="setDtekSpinner('city', true); dtekDebounce(fetchDtekCitySuggestions)" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Введіть місто..." />
-              <svg id="dtek-city-spinner" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-stone-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <span id="dtek-city-spinner" class="hidden dtek-spinner"></span>
               <div id="dtek-city-dropdown" class="hidden absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
             </div>
           </div>
@@ -168,7 +172,7 @@
               <input id="dtek-street-input" type="text" oninput="setDtekSpinner('street', true); dtekDebounce(fetchDtekStreetSuggestions)" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Введіть вулицю..." />
-              <svg id="dtek-street-spinner" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-stone-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <span id="dtek-street-spinner" class="hidden dtek-spinner"></span>
               <div id="dtek-street-dropdown" class="hidden absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
             </div>
           </div>
@@ -180,7 +184,7 @@
               <input id="dtek-house-input" type="text" oninput="setDtekSpinner('house', true); dtekDebounce(fetchDtekHouseSuggestions)" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Номер будинку" />
-              <svg id="dtek-house-spinner" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-stone-400 pointer-events-none" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <span id="dtek-house-spinner" class="hidden dtek-spinner"></span>
               <div id="dtek-house-dropdown" class="hidden absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
             </div>
           </div>

@@ -60,21 +60,9 @@ async function ensureBrowser() {
 
 export async function initBrowser() {
   browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] })
-
-  for (const [region, url] of Object.entries(shutdownsPages)) {
-    if (region === "k") continue  // Kyiv uses a separate context with timezone — see below
-    await reloadPage(region, url)
-    const page = regionPages.get(region)
-    const cookies = await page.context().cookies()
-    logCookies(region, cookies)
-  }
-
-  // Kyiv requires timezone-matched context to pass Imperva's WAF JS challenge
+  // Kyiv requires timezone-matched context to pass Imperva's WAF JS challenge.
+  // Creating the context is cheap (no tab); the page opens lazily on first request.
   kyivContext = await browser.newContext(KYIV_CONTEXT_OPTIONS)
-  const kyivPage = await kyivContext.newPage()
-  await kyivPage.goto(shutdownsPages["k"], { waitUntil: "networkidle", timeout: 60_000 })
-  regionPages.set("k", kyivPage)
-  logCookies("k", await kyivContext.cookies())
 }
 
 async function reloadPage(region, url) {
@@ -131,12 +119,18 @@ export async function closeBrowser() {
 }
 
 async function getPage(region) {
-  const page = regionPages.get(region) ?? regionPages.get("kr")
+  const page = regionPages.get(region)
 
-  if (page.isClosed()) {
-    console.log(`[${region}] Tab was closed unexpectedly (browser crash or external close) — reopening...`)
+  if (!page || page.isClosed()) {
+    const reason = !page ? "Tab not yet open — opening lazily..." : "Tab was closed unexpectedly — reopening..."
+    console.log(`[${region}] ${reason}`)
     await reloadPage(region, shutdownsPages[region] ?? shutdownsPages["kr"])
-    return regionPages.get(region)
+    const opened = regionPages.get(region)
+    const cookies = region === "k"
+      ? await kyivContext.cookies()
+      : await opened.context().cookies()
+    logCookies(region, cookies)
+    return opened
   }
 
   return page

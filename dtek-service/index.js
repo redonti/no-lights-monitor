@@ -6,9 +6,9 @@ const PORT = process.env.PORT || 3000
 const VALID_REGIONS = new Set(["k", "kr", "dn", "o", "d"])
 const LOOKUP_TIMEOUT_MS = 30_000
 
-console.log("Initializing browser, loading tabs for all regions...")
+console.log("Launching browser...")
 await initBrowser()
-console.log("Browser ready.")
+console.log("Browser ready. Region tabs will open on first request.")
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)

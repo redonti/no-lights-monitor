@@ -59,13 +59,16 @@ func main() {
 	app.Use(cors.New())
 
 	// API routes
-	h := &handlers.Handlers{DB: db, Cache: redisCache, OutageServiceURL: cfg.OutageServiceURL}
+	h := &handlers.Handlers{DB: db, Cache: redisCache, OutageServiceURL: cfg.OutageServiceURL, DtekServiceURL: cfg.DtekServiceURL}
 	api := app.Group("/api")
 	api.Get("/ping/:token", h.PingAPI)
 	api.Get("/monitors", h.GetMonitors)
 
 	// Proxy outage API from the outage service (for settings page)
 	api.Get("/outage/*", h.ProxyOutage)
+
+	// Proxy DTEK scraper (address autocomplete for settings page)
+	api.Get("/dtek/*", h.ProxyDtek)
 
 	// Settings API (accessed by settings_token)
 	api.Get("/settings/:token", h.GetSettings)

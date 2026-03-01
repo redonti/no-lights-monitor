@@ -40,6 +40,31 @@ func (h *Handlers) ProxyOutage(c *fiber.Ctx) error {
 	return c.Status(resp.StatusCode).Send(body)
 }
 
+// ProxyDtek forwards requests to the DTEK scraper service.
+// Handles /api/dtek/* routes (e.g. /api/dtek/suggest?region=k&q=...).
+func (h *Handlers) ProxyDtek(c *fiber.Ctx) error {
+	if h.DtekServiceURL == "" {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "dtek service not configured"})
+	}
+	path := c.Params("*")
+	rawQuery := string(c.Request().URI().QueryString())
+	target := fmt.Sprintf("%s/%s?%s", h.DtekServiceURL, path, rawQuery)
+
+	resp, err := proxyHTTPClient.Get(target)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "dtek service unavailable"})
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "failed to read dtek response"})
+	}
+
+	c.Set("Content-Type", resp.Header.Get("Content-Type"))
+	return c.Status(resp.StatusCode).Send(body)
+}
+
 // GetSettings returns the full monitor configuration for the settings page.
 func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 	token := c.Params("token")
@@ -74,6 +99,11 @@ func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 		"monitor_type":    m.MonitorType,
 		"ping_target":     m.PingTarget,
 		"status_duration": database.FormatDuration(dur),
+		"dtek_enabled":    m.DtekEnabled,
+		"dtek_region":     m.DtekRegion,
+		"dtek_city":       m.DtekCity,
+		"dtek_street":     m.DtekStreet,
+		"dtek_house":      m.DtekHouse,
 	})
 }
 
@@ -82,6 +112,8 @@ const (
 	maxAddressLen      = 300
 	maxOutageRegionLen = 50
 	maxOutageGroupLen  = 100
+	maxDtekFieldLen    = 200
+	maxDtekHouseLen    = 30
 )
 
 // settingsUpdateRequest is the JSON body for updating monitor settings.
@@ -97,6 +129,11 @@ type settingsUpdateRequest struct {
 	NotifyOutage       *bool `json:"notify_outage"`
 	OutagePhotoEnabled *bool `json:"outage_photo_enabled"`
 	GraphEnabled       *bool `json:"graph_enabled"`
+	DtekEnabled  *bool   `json:"dtek_enabled"`
+	DtekRegion   *string `json:"dtek_region"`
+	DtekCity     *string `json:"dtek_city"`
+	DtekStreet   *string `json:"dtek_street"`
+	DtekHouse    *string `json:"dtek_house"`
 }
 
 // UpdateSettings updates editable fields of a monitor.
@@ -184,6 +221,30 @@ func (h *Handlers) UpdateSettings(c *fiber.Ctx) error {
 	if req.GraphEnabled != nil && *req.GraphEnabled != m.GraphEnabled {
 		if err := h.DB.SetMonitorGraphEnabled(ctx, m.ID, *req.GraphEnabled); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update graph_enabled"})
+		}
+	}
+
+	// Update DTEK enabled toggle.
+	if req.DtekEnabled != nil && *req.DtekEnabled != m.DtekEnabled {
+		if err := h.DB.SetMonitorDtekEnabled(ctx, m.ID, *req.DtekEnabled); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update dtek_enabled"})
+		}
+	}
+
+	// Update DTEK address config (region + city + street + house sent together).
+	if req.DtekRegion != nil && req.DtekStreet != nil && req.DtekHouse != nil {
+		region := *req.DtekRegion
+		city := ""
+		if req.DtekCity != nil {
+			city = *req.DtekCity
+		}
+		street := *req.DtekStreet
+		house := *req.DtekHouse
+		if len(region) > 10 || len(city) > maxDtekFieldLen || len(street) > maxDtekFieldLen || len(house) > maxDtekHouseLen {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "dtek field too long"})
+		}
+		if err := h.DB.SetMonitorDtekConfig(ctx, m.ID, m.DtekEnabled, region, city, street, house); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update dtek config"})
 		}
 	}
 

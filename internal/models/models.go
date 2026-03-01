@@ -38,8 +38,14 @@ type Monitor struct {
 	OutagePhotoMessageID int        `json:"outage_photo_message_id" db:"outage_photo_message_id"`
 	OutagePhotoUpdatedAt *time.Time `json:"outage_photo_updated_at,omitempty" db:"outage_photo_updated_at"`
 	OutagePhotoETag      string     `json:"outage_photo_etag" db:"outage_photo_etag"`
-	SettingsToken      string     `json:"settings_token" db:"settings_token"`
-	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+	SettingsToken        string     `json:"settings_token" db:"settings_token"`
+	DtekEnabled          bool       `json:"dtek_enabled" db:"dtek_enabled"`
+	DtekRegion           string     `json:"dtek_region" db:"dtek_region"`
+	DtekCity             string     `json:"dtek_city" db:"dtek_city"`
+	DtekStreet           string     `json:"dtek_street" db:"dtek_street"`
+	DtekHouse            string     `json:"dtek_house" db:"dtek_house"`
+	DtekOutageNotifiedAt *time.Time `json:"dtek_outage_notified_at,omitempty" db:"dtek_outage_notified_at"`
+	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 }
 
 // MonitorPublic is the public API representation shown on the map.

@@ -12,6 +12,7 @@ import (
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/cmd/worker/dtek"
 	"no-lights-monitor/cmd/worker/graph"
 	"no-lights-monitor/cmd/worker/heartbeat"
 	"no-lights-monitor/internal/mq"
@@ -90,6 +91,13 @@ func main() {
 	photoUpdater := outagephoto.NewUpdater(db, publisher)
 	go photoUpdater.Start(ctx)
 	log.Println("outage photo updater started")
+
+	// --- DTEK unplanned outage poller ---
+	if cfg.DtekServiceURL != "" {
+		dtekPoller := dtek.NewPoller(db, publisher, cfg.DtekServiceURL)
+		go dtekPoller.Start(ctx, cfg.DtekPollInterval)
+		log.Printf("dtek outage poller started (interval: %ds)", cfg.DtekPollInterval)
+	}
 
 	// --- Graceful shutdown ---
 	quit := make(chan os.Signal, 1)

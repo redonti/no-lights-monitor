@@ -32,3 +32,6 @@ services:
   outage:
     logging:
       driver: "json-file"
+  dtek:
+    logging:
+      driver: "json-file"

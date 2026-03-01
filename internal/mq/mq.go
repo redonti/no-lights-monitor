@@ -18,11 +18,13 @@ const (
 	RoutingGraphReady   = "graph.ready"
 	RoutingOutagePhoto  = "outage.photo"
 	RoutingGraphRequest = "graph.request"
+	RoutingDtekOutage   = "dtek.outage"
 
 	QueueStatusChange = "nlm.status_change"
 	QueueGraphReady   = "nlm.graph_ready"
 	QueueOutagePhoto  = "nlm.outage_photo"
 	QueueGraphRequest = "nlm.graph_request"
+	QueueDtekOutage   = "nlm.dtek_outage"
 )
 
 // ── Message types ────────────────────────────────────────────────────
@@ -83,6 +85,17 @@ type GraphRequestMsg struct {
 	ChannelID int64 `json:"channel_id"`
 }
 
+// DtekOutageMsg is published by the worker when a DTEK unplanned outage is detected.
+type DtekOutageMsg struct {
+	MonitorID       int64  `json:"monitor_id"`
+	ChannelID       int64  `json:"channel_id"`
+	OwnerTelegramID int64  `json:"owner_telegram_id"`
+	MonitorName     string `json:"monitor_name"`
+	SubType         string `json:"sub_type"`
+	StartDate       string `json:"start_date"`
+	EndDate         string `json:"end_date"`
+}
+
 // ── Topology setup ───────────────────────────────────────────────────
 
 // queues maps queue names to their routing keys.
@@ -91,6 +104,7 @@ var queues = map[string]string{
 	QueueGraphReady:   RoutingGraphReady,
 	QueueOutagePhoto:  RoutingOutagePhoto,
 	QueueGraphRequest: RoutingGraphRequest,
+	QueueDtekOutage:   RoutingDtekOutage,
 }
 
 // SetupTopology declares the exchange, all queues, and bindings.

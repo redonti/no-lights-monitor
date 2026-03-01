@@ -83,10 +83,12 @@ services:
       ADMIN_LOGIN: ${ADMIN_LOGIN}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       OUTAGE_SERVICE_URL: http://outage:8090
+      DTEK_SERVICE_URL: http://dtek:3000
     depends_on:
       - postgres
       - redis
       - outage
+      - dtek
     restart: unless-stopped
     logging:
       driver: journald
@@ -128,11 +130,14 @@ services:
       GRAPH_SERVICE_URL: http://graph-service:8000
       OFFLINE_THRESHOLD: ${OFFLINE_THRESHOLD:-300}
       PING_INTERVAL: ${PING_INTERVAL:-300}
+      DTEK_SERVICE_URL: http://dtek:3000
+      DTEK_POLL_INTERVAL: ${DTEK_POLL_INTERVAL:-900}
     depends_on:
       - postgres
       - redis
       - rabbitmq
       - graph-service
+      - dtek
     restart: unless-stopped
     logging:
       driver: journald
@@ -164,6 +169,23 @@ services:
       driver: journald
       options:
         tag: nolights-bot
+
+  # DTEK Service - Scrapes DTEK website for unplanned outage status by address
+  dtek:
+    image: ghcr.io/redonti/no-lights-monitor/dtek:latest
+    build:
+      context: ./dtek-service
+    container_name: nolights-dtek
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      TZ: Europe/Kyiv
+      PORT: 3000
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-dtek
 
   # Outage Service - Fetches and serves power outage schedule data (internal only)
   outage:

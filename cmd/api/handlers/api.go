@@ -19,6 +19,7 @@ type Handlers struct {
 	Cache *cache.Cache // For API service (stateless ping)
 
 	OutageServiceURL string // URL of the outage data service (for proxying)
+	DtekServiceURL   string // URL of the DTEK scraper service (for proxying)
 
 	// In-memory response cache for /api/monitors.
 	monitorCache   []byte

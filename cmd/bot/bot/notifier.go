@@ -222,6 +222,36 @@ func findNextRestoration(hours map[string]string, currentHour int) (hour, minute
 	return 0, 0, false
 }
 
+// NotifyDtekOutage sends a DTEK unplanned outage notification.
+// It goes to the monitor's channel, or directly to the owner if no channel is set.
+func (n *TelegramNotifier) NotifyDtekOutage(monitorID, channelID, ownerTelegramID int64, monitorName, subType, startDate, endDate string) {
+	var text string
+	if startDate != "" && endDate != "" {
+		timeRange := startDate + " — " + endDate
+		text = fmt.Sprintf(msgDtekOutage, html.EscapeString(monitorName), html.EscapeString(subType), timeRange)
+	} else {
+		text = fmt.Sprintf(msgDtekOutageNoTime, html.EscapeString(monitorName), html.EscapeString(subType))
+	}
+
+	opts := &tele.SendOptions{ParseMode: tele.ModeHTML, DisableNotification: false}
+
+	if channelID != 0 {
+		chat := &tele.Chat{ID: channelID}
+		if _, err := n.bot.Send(chat, text, opts); err != nil {
+			log.Printf("[bot] dtek: failed to send to channel %d: %v", channelID, err)
+			// Fall back to owner DM.
+			if ownerTelegramID != 0 {
+				SendToUser(n.bot, ownerTelegramID, text)
+			}
+		}
+		return
+	}
+
+	if ownerTelegramID != 0 {
+		SendToUser(n.bot, ownerTelegramID, text)
+	}
+}
+
 // IsQuietHour reports whether the current Kyiv time is between 23:00 and 07:00.
 func IsQuietHour() bool {
 	kyiv, _ := time.LoadLocation("Europe/Kyiv")

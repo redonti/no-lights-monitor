@@ -49,8 +49,12 @@ func (l *listener) start(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("[listener] failed to consume %s: %v", mq.QueueOutagePhoto, err)
 	}
+	dtekCh, err := l.consumer.Consume(mq.QueueDtekOutage)
+	if err != nil {
+		log.Fatalf("[listener] failed to consume %s: %v", mq.QueueDtekOutage, err)
+	}
 
-	log.Println("[listener] consuming from status_change, graph_ready, outage_photo")
+	log.Println("[listener] consuming from status_change, graph_ready, outage_photo, dtek_outage")
 
 	for {
 		select {
@@ -75,8 +79,28 @@ func (l *listener) start(ctx context.Context) {
 			}
 			l.handleOutagePhoto(ctx, d.Body)
 			d.Ack(false)
+		case d, ok := <-dtekCh:
+			if !ok {
+				return
+			}
+			l.handleDtekOutage(d.Body)
+			d.Ack(false)
 		}
 	}
+}
+
+// ── DTEK outage handler ──────────────────────────────────────────────
+
+func (l *listener) handleDtekOutage(payload []byte) {
+	var msg mq.DtekOutageMsg
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		log.Printf("[listener] bad dtek_outage message: %v", err)
+		return
+	}
+	l.notifier.NotifyDtekOutage(
+		msg.MonitorID, msg.ChannelID, msg.OwnerTelegramID,
+		msg.MonitorName, msg.SubType, msg.StartDate, msg.EndDate,
+	)
 }
 
 // ── Status change handler ────────────────────────────────────────────

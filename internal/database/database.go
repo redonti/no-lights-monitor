@@ -17,7 +17,9 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	is_online, is_active, is_public, notify_address,
 	outage_region, outage_group, notify_outage, outage_photo_enabled,
 	graph_enabled, last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start,
-	outage_photo_message_id, outage_photo_updated_at, outage_photo_etag, settings_token, created_at`
+	outage_photo_message_id, outage_photo_updated_at, outage_photo_etag, settings_token,
+	dtek_enabled, dtek_region, dtek_city, dtek_street, dtek_house, dtek_outage_notified_at,
+	created_at`
 
 // monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
 const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
@@ -25,7 +27,9 @@ const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.la
 	m.is_online, m.is_active, m.is_public, m.notify_address,
 	m.outage_region, m.outage_group, m.notify_outage, m.outage_photo_enabled,
 	m.graph_enabled, m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start,
-	m.outage_photo_message_id, m.outage_photo_updated_at, m.outage_photo_etag, m.settings_token, m.created_at`
+	m.outage_photo_message_id, m.outage_photo_updated_at, m.outage_photo_etag, m.settings_token,
+	m.dtek_enabled, m.dtek_region, m.dtek_city, m.dtek_street, m.dtek_house, m.dtek_outage_notified_at,
+	m.created_at`
 
 const userColumns = `id, telegram_id, username, first_name, created_at`
 
@@ -97,6 +101,12 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_token UUID UNIQUE DEFAULT gen_random_uuid();
 	UPDATE monitors SET settings_token = gen_random_uuid() WHERE settings_token IS NULL;
 	ALTER TABLE monitors ALTER COLUMN settings_token SET NOT NULL;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_region TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_city TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_street TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_house TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_notified_at TIMESTAMPTZ;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_settings_token ON monitors(settings_token);
@@ -411,6 +421,52 @@ func (db *DB) GetStatusHistory(ctx context.Context, monitorID int64, from, to ti
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.StatusEvent])
+}
+
+// SetMonitorDtekConfig saves the DTEK unplanned outage config for a monitor.
+func (db *DB) SetMonitorDtekConfig(ctx context.Context, id int64, enabled bool, region, city, street, house string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors
+		SET dtek_enabled = $2, dtek_region = $3, dtek_city = $4, dtek_street = $5, dtek_house = $6
+		WHERE id = $1
+	`, id, enabled, region, city, street, house)
+	return err
+}
+
+// SetMonitorDtekEnabled toggles the DTEK unplanned outage monitoring.
+func (db *DB) SetMonitorDtekEnabled(ctx context.Context, id int64, enabled bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_enabled = $2 WHERE id = $1
+	`, id, enabled)
+	return err
+}
+
+// SetMonitorDtekOutageNotifiedAt records when a DTEK outage notification was sent.
+func (db *DB) SetMonitorDtekOutageNotifiedAt(ctx context.Context, id int64, t time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_outage_notified_at = $2 WHERE id = $1
+	`, id, t)
+	return err
+}
+
+// GetDtekPendingMonitors returns active, offline monitors with DTEK enabled that
+// have not yet been notified for the current offline period.
+func (db *DB) GetDtekPendingMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE is_active = TRUE
+		  AND is_online = FALSE
+		  AND dtek_enabled = TRUE
+		  AND dtek_region != ''
+		  AND dtek_street != ''
+		  AND dtek_house != ''
+		  AND (dtek_outage_notified_at IS NULL OR dtek_outage_notified_at < last_status_change_at)
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
 }
 
 // ── Other queries ────────────────────────────────────────────────────

@@ -12,6 +12,8 @@ const (
 	DefaultOfflineThresholdSec = 300
 	// DefaultOutageFetchIntervalSec is seconds between outage data fetches from GitHub.
 	DefaultOutageFetchIntervalSec = 900
+	// DefaultDtekPollIntervalSec is seconds between DTEK unplanned outage checks.
+	DefaultDtekPollIntervalSec = 900
 )
 
 type Config struct {
@@ -28,6 +30,8 @@ type Config struct {
 	OutageFetchInterval int    // seconds between outage data fetches
 	OutageServiceURL    string // URL of the outage data service
 	RabbitMQURL         string // AMQP connection URL for RabbitMQ
+	DtekServiceURL      string // URL of the DTEK unplanned outage scraper service
+	DtekPollInterval    int    // seconds between DTEK outage checks
 }
 
 func Load() *Config {
@@ -45,6 +49,8 @@ func Load() *Config {
 		OutageFetchInterval: getEnvInt("OUTAGE_FETCH_INTERVAL", DefaultOutageFetchIntervalSec),
 		OutageServiceURL:    getEnv("OUTAGE_SERVICE_URL", "http://localhost:8090"),
 		RabbitMQURL:         getEnv("RABBITMQ_URL", "amqp://nolights:changeme@localhost:5672/"),
+		DtekServiceURL:      getEnv("DTEK_SERVICE_URL", "http://localhost:3000"),
+		DtekPollInterval:    getEnvInt("DTEK_POLL_INTERVAL", DefaultDtekPollIntervalSec),
 	}
 }
 

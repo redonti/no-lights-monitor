@@ -47,6 +47,8 @@ jobs:
               - 'go.sum'
             graph-service:
               - 'graph-service/**'
+            dtek:
+              - 'dtek-service/**'
 
   build:
     needs: changes
@@ -74,6 +76,10 @@ jobs:
             graph-service)
               echo "dockerfile=graph-service/Dockerfile" >> $GITHUB_OUTPUT
               echo "context=./graph-service" >> $GITHUB_OUTPUT
+              ;;
+            dtek)
+              echo "dockerfile=dtek-service/Dockerfile" >> $GITHUB_OUTPUT
+              echo "context=./dtek-service" >> $GITHUB_OUTPUT
               ;;
             *)
               echo "dockerfile=Dockerfile.${{ matrix.service }}" >> $GITHUB_OUTPUT

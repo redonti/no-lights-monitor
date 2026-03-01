@@ -384,3 +384,12 @@ const msgChannelPausedBySystem = "⚠️ <b>Моніторинг призупи�
 
 // msgChannelResumed is posted to the channel when the owner resumes monitoring.
 const msgChannelResumed = "▶️ <b>Моніторинг відновлено</b>\n\nВласник відновив оновлення статусу."
+
+// ── DTEK unplanned outage notifications ─────────────────────────────
+
+// msgDtekOutage is sent when DTEK confirms an unplanned outage for the monitor's address.
+// %s = monitor name, %s = outage type, %s = start–end time range.
+const msgDtekOutage = "⚡ <b>Відключення підтверджено ДТЕК</b>\n\n<b>%s</b>\n\n<i>%s</i>\n%s"
+
+// msgDtekOutageNoTime is used when DTEK does not return a time range.
+const msgDtekOutageNoTime = "⚡ <b>Відключення підтверджено ДТЕК</b>\n\n<b>%s</b>\n\n<i>%s</i>"

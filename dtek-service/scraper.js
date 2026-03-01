@@ -24,6 +24,9 @@ let kyivContext = null          // isolated context with Kyiv timezone, needed f
 const regionPages = new Map()   // region -> page
 const reloadLocks = new Map()   // region -> Promise (prevents concurrent reloads)
 let reinitLock = null            // Promise (prevents concurrent browser reinits)
+const lastUsed = new Map()      // region -> Date.now() of last access
+const IDLE_TAB_MS = 15 * 60 * 1000
+let idleCloserTimer = null
 
 function logCookies(region, cookies) {
   const now = Date.now() / 1000
@@ -63,6 +66,19 @@ export async function initBrowser() {
   // Kyiv requires timezone-matched context to pass Imperva's WAF JS challenge.
   // Creating the context is cheap (no tab); the page opens lazily on first request.
   kyivContext = await browser.newContext(KYIV_CONTEXT_OPTIONS)
+  idleCloserTimer = setInterval(closeIdleTabs, 5 * 60 * 1000)
+}
+
+async function closeIdleTabs() {
+  const now = Date.now()
+  for (const [region, page] of regionPages) {
+    if (now - (lastUsed.get(region) ?? 0) > IDLE_TAB_MS && !page.isClosed()) {
+      console.log(`[${region}] Tab idle for 15min — closing to free memory`)
+      await page.close().catch(() => {})
+      regionPages.delete(region)
+      lastUsed.delete(region)
+    }
+  }
 }
 
 async function reloadPage(region, url) {
@@ -108,6 +124,8 @@ export function getKyivContext() {
 }
 
 export async function closeBrowser() {
+  clearInterval(idleCloserTimer)
+  idleCloserTimer = null
   for (const page of regionPages.values()) {
     await page.close().catch(() => {})
   }
@@ -130,9 +148,11 @@ async function getPage(region) {
       ? await kyivContext.cookies()
       : await opened.context().cookies()
     logCookies(region, cookies)
+    lastUsed.set(region, Date.now())
     return opened
   }
 
+  lastUsed.set(region, Date.now())
   return page
 }
 

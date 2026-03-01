@@ -9,6 +9,20 @@ const shutdownsPages = {
 // Persistent lookup page per region, reused between requests.
 // A promise queue (tail) ensures only one lookup runs per region at a time.
 const pool = new Map() // region → { page: Page | null, tail: Promise }
+const lastUsed = new Map()  // region → Date.now() of last completed lookup
+const IDLE_TAB_MS = 15 * 60 * 1000
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [region, entry] of pool) {
+    if (entry.page && !entry.page.isClosed() && now - (lastUsed.get(region) ?? 0) > IDLE_TAB_MS) {
+      console.log(`[lookup:${region}] Tab idle for 15min — closing to free memory`)
+      entry.page.close().catch(() => {})
+      entry.page = null
+      lastUsed.delete(region)
+    }
+  }
+}, 5 * 60 * 1000)
 
 function getEntry(region) {
   if (!pool.has(region)) {
@@ -72,6 +86,7 @@ async function withPage(browser, region, fn) {
     }
     const result = await fn(entry.page)
     console.log(`[lookup:${region}] Done (${Date.now() - t0}ms)`)
+    lastUsed.set(region, Date.now())
     return result
   } catch (err) {
     // Force page recreation on next use if something went wrong

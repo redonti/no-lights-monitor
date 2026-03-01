@@ -157,7 +157,7 @@
           <div id="dtek-city-group">
             <label class="block text-xs font-medium text-stone-600 mb-1">Місто</label>
             <div class="relative">
-              <input id="dtek-city-input" type="text" oninput="setDtekSpinner('city', true); dtekDebounce(fetchDtekCitySuggestions)" autocomplete="off" disabled
+              <input id="dtek-city-input" type="text" oninput="onDtekCityInput()" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Введіть місто..." />
               <span id="dtek-city-spinner" class="hidden dtek-spinner"></span>
@@ -169,7 +169,7 @@
           <div>
             <label class="block text-xs font-medium text-stone-600 mb-1">Вулиця</label>
             <div class="relative">
-              <input id="dtek-street-input" type="text" oninput="setDtekSpinner('street', true); dtekDebounce(fetchDtekStreetSuggestions)" autocomplete="off" disabled
+              <input id="dtek-street-input" type="text" oninput="onDtekStreetInput()" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Введіть вулицю..." />
               <span id="dtek-street-spinner" class="hidden dtek-spinner"></span>
@@ -239,7 +239,21 @@
 
     function dtekDebounce(fn) {
       clearTimeout(dtekDebounceTimer);
-      dtekDebounceTimer = setTimeout(fn, 350);
+      dtekDebounceTimer = setTimeout(fn, 400);
+    }
+
+    function onDtekCityInput() {
+      const q = document.getElementById('dtek-city-input').value;
+      if (q.length >= 3) { setDtekSpinner('city', true); }
+      else { setDtekSpinner('city', false); document.getElementById('dtek-city-dropdown').classList.add('hidden'); }
+      dtekDebounce(fetchDtekCitySuggestions);
+    }
+
+    function onDtekStreetInput() {
+      const q = document.getElementById('dtek-street-input').value;
+      if (q.length >= 3) { setDtekSpinner('street', true); }
+      else { setDtekSpinner('street', false); document.getElementById('dtek-street-dropdown').classList.add('hidden'); }
+      dtekDebounce(fetchDtekStreetSuggestions);
     }
 
     function onDtekRegionChange() {
@@ -299,7 +313,7 @@
     async function fetchDtekCitySuggestions() {
       const region = document.getElementById('dtek-region').value;
       const q = document.getElementById('dtek-city-input').value;
-      if (!region || q.length < 1) { setDtekSpinner('city', false); return; }
+      if (!region || q.length < 3) { setDtekSpinner('city', false); return; }
       const suggestions = await fetchDtekSuggestions({ region, q });
       setDtekSpinner('city', false);
       showDtekDropdown('dtek-city-dropdown', suggestions, (s) => {
@@ -316,7 +330,7 @@
     async function fetchDtekStreetSuggestions() {
       const region = document.getElementById('dtek-region').value;
       const q = document.getElementById('dtek-street-input').value;
-      if (!region || q.length < 1) { setDtekSpinner('street', false); return; }
+      if (!region || q.length < 3) { setDtekSpinner('street', false); return; }
       const params = { region, q };
       if (region !== 'k' && dtekCityValue) params.city = dtekCityValue;
       const suggestions = await fetchDtekSuggestions(params);

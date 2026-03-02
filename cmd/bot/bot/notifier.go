@@ -222,6 +222,21 @@ func findNextRestoration(hours map[string]string, currentHour int) (hour, minute
 	return 0, 0, false
 }
 
+// NotifyInactivePause sends notifications when a monitor is auto-paused due to no activity.
+// It posts to the channel (if linked) and sends a DM to the owner.
+func (n *TelegramNotifier) NotifyInactivePause(monitorID, channelID, ownerTelegramID int64, monitorName string) {
+	if channelID != 0 {
+		chat := &tele.Chat{ID: channelID}
+		if _, err := n.bot.Send(chat, msgChannelInactivePause, htmlOpts); err != nil {
+			log.Printf("[bot] inactive-pause: failed to send to channel %d: %v", channelID, err)
+		}
+	}
+	if ownerTelegramID != 0 {
+		text := fmt.Sprintf(msgInactivePause, html.EscapeString(monitorName))
+		SendToUser(n.bot, ownerTelegramID, text)
+	}
+}
+
 // NotifyDtekOutage sends a DTEK unplanned outage notification.
 // It goes to the monitor's channel, or directly to the owner if no channel is set.
 func (n *TelegramNotifier) NotifyDtekOutage(monitorID, channelID, ownerTelegramID int64, monitorName, subType, startDate, endDate string) {

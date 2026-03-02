@@ -53,8 +53,12 @@ func (l *listener) start(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("[listener] failed to consume %s: %v", mq.QueueDtekOutage, err)
 	}
+	inactiveCh, err := l.consumer.Consume(mq.QueueInactivePause)
+	if err != nil {
+		log.Fatalf("[listener] failed to consume %s: %v", mq.QueueInactivePause, err)
+	}
 
-	log.Println("[listener] consuming from status_change, graph_ready, outage_photo, dtek_outage")
+	log.Println("[listener] consuming from status_change, graph_ready, outage_photo, dtek_outage, inactive_pause")
 
 	for {
 		select {
@@ -85,6 +89,12 @@ func (l *listener) start(ctx context.Context) {
 			}
 			l.handleDtekOutage(d.Body)
 			d.Ack(false)
+		case d, ok := <-inactiveCh:
+			if !ok {
+				return
+			}
+			l.handleInactivePause(d.Body)
+			d.Ack(false)
 		}
 	}
 }
@@ -101,6 +111,17 @@ func (l *listener) handleDtekOutage(payload []byte) {
 		msg.MonitorID, msg.ChannelID, msg.OwnerTelegramID,
 		msg.MonitorName, msg.SubType, msg.StartDate, msg.EndDate,
 	)
+}
+
+// ── Inactive pause handler ───────────────────────────────────────────
+
+func (l *listener) handleInactivePause(payload []byte) {
+	var msg mq.InactivePauseMsg
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		log.Printf("[listener] bad inactive_pause message: %v", err)
+		return
+	}
+	l.notifier.NotifyInactivePause(msg.MonitorID, msg.ChannelID, msg.OwnerTelegramID, msg.MonitorName)
 }
 
 // ── Status change handler ────────────────────────────────────────────

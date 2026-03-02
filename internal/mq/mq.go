@@ -18,13 +18,15 @@ const (
 	RoutingGraphReady   = "graph.ready"
 	RoutingOutagePhoto  = "outage.photo"
 	RoutingGraphRequest = "graph.request"
-	RoutingDtekOutage   = "dtek.outage"
+	RoutingDtekOutage    = "dtek.outage"
+	RoutingInactivePause = "inactive.pause"
 
-	QueueStatusChange = "nlm.status_change"
-	QueueGraphReady   = "nlm.graph_ready"
-	QueueOutagePhoto  = "nlm.outage_photo"
-	QueueGraphRequest = "nlm.graph_request"
-	QueueDtekOutage   = "nlm.dtek_outage"
+	QueueStatusChange  = "nlm.status_change"
+	QueueGraphReady    = "nlm.graph_ready"
+	QueueOutagePhoto   = "nlm.outage_photo"
+	QueueGraphRequest  = "nlm.graph_request"
+	QueueDtekOutage    = "nlm.dtek_outage"
+	QueueInactivePause = "nlm.inactive_pause"
 )
 
 // ── Message types ────────────────────────────────────────────────────
@@ -96,15 +98,25 @@ type DtekOutageMsg struct {
 	EndDate         string `json:"end_date"`
 }
 
+// InactivePauseMsg is published by the worker when a monitor is auto-paused
+// due to no activity since creation (last_status_change_at == created_at).
+type InactivePauseMsg struct {
+	MonitorID       int64  `json:"monitor_id"`
+	ChannelID       int64  `json:"channel_id"`
+	OwnerTelegramID int64  `json:"owner_telegram_id"`
+	MonitorName     string `json:"monitor_name"`
+}
+
 // ── Topology setup ───────────────────────────────────────────────────
 
 // queues maps queue names to their routing keys.
 var queues = map[string]string{
-	QueueStatusChange: RoutingStatusChange,
-	QueueGraphReady:   RoutingGraphReady,
-	QueueOutagePhoto:  RoutingOutagePhoto,
-	QueueGraphRequest: RoutingGraphRequest,
-	QueueDtekOutage:   RoutingDtekOutage,
+	QueueStatusChange:  RoutingStatusChange,
+	QueueGraphReady:    RoutingGraphReady,
+	QueueOutagePhoto:   RoutingOutagePhoto,
+	QueueGraphRequest:  RoutingGraphRequest,
+	QueueDtekOutage:    RoutingDtekOutage,
+	QueueInactivePause: RoutingInactivePause,
 }
 
 // SetupTopology declares the exchange, all queues, and bindings.

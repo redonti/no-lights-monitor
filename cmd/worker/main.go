@@ -15,6 +15,7 @@ import (
 	"no-lights-monitor/cmd/worker/dtek"
 	"no-lights-monitor/cmd/worker/graph"
 	"no-lights-monitor/cmd/worker/heartbeat"
+	"no-lights-monitor/cmd/worker/inactivity"
 	"no-lights-monitor/internal/mq"
 	"no-lights-monitor/cmd/worker/outagephoto"
 )
@@ -91,6 +92,11 @@ func main() {
 	photoUpdater := outagephoto.NewUpdater(db, publisher)
 	go photoUpdater.Start(ctx)
 	log.Println("outage photo updater started")
+
+	// --- Inactivity checker (daily at 13:00 Kyiv) ---
+	inactivityChecker := inactivity.NewChecker(db, publisher)
+	go inactivityChecker.Start(ctx)
+	log.Println("inactivity checker started")
 
 	// --- DTEK unplanned outage poller ---
 	if cfg.DtekServiceURL != "" {

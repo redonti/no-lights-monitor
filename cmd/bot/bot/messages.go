@@ -393,3 +393,12 @@ const msgDtekOutage = "⚡ <b>Відключення підтверджено Д
 
 // msgDtekOutageNoTime is used when DTEK does not return a time range.
 const msgDtekOutageNoTime = "⚡ <b>Відключення підтверджено ДТЕК</b>\n\n<b>%s</b>\n\n<i>%s</i>"
+
+// ── Inactivity auto-pause ────────────────────────────────────────────
+
+// msgInactivePause is sent to the monitor owner when auto-paused due to no activity.
+// %s = monitor name.
+const msgInactivePause = "⏸ <b>Монітор призупинено</b>\n\nМонітор <b>%s</b> було автоматично призупинено, оскільки з моменту створення не надійшло жодного сигналу.\n\nПереконайтеся, що пристрій налаштовано коректно, та відновіть моніторинг через /resume."
+
+// msgChannelInactivePause is posted to the channel when auto-paused due to no activity.
+const msgChannelInactivePause = "⏸ <b>Моніторинг призупинено автоматично</b>\n\nЖодного сигналу з моменту створення монітора. Власник отримав сповіщення."

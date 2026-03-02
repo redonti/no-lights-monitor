@@ -449,6 +449,21 @@ func (db *DB) SetMonitorDtekOutageNotifiedAt(ctx context.Context, id int64, t ti
 	return err
 }
 
+// GetNeverActiveMonitors returns active monitors where last_status_change_at equals
+// created_at, meaning they have never received any heartbeat or status change since creation.
+func (db *DB) GetNeverActiveMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE is_active = TRUE
+		  AND last_status_change_at = created_at
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
 // GetDtekPendingMonitors returns active, offline monitors with DTEK enabled that
 // have not yet been notified for the current offline period.
 func (db *DB) GetDtekPendingMonitors(ctx context.Context) ([]*models.Monitor, error) {

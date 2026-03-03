@@ -421,6 +421,15 @@ document.getElementById('toggle-svitlobot').addEventListener('change', function 
   }
 });
 
+// --- Grouping toggle ---
+document.getElementById('toggle-grouping').addEventListener('change', function () {
+  if (this.checked) {
+    clusterGroup.enableClustering();
+  } else {
+    clusterGroup.disableClustering();
+  }
+});
+
 // --- Initialize ---
 loadMonitors();
 loadSvitlobot();

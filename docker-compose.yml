@@ -132,12 +132,14 @@ services:
       PING_INTERVAL: ${PING_INTERVAL:-300}
       DTEK_SERVICE_URL: http://dtek:3000
       DTEK_POLL_INTERVAL: ${DTEK_POLL_INTERVAL:-900}
+      OUTAGE_SERVICE_URL: http://outage:8090
     depends_on:
       - postgres
       - redis
       - rabbitmq
       - graph-service
       - dtek
+      - outage
     restart: unless-stopped
     logging:
       driver: journald

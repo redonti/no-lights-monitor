@@ -38,6 +38,9 @@ const clusterGroup = L.markerClusterGroup({
 });
 map.addLayer(clusterGroup);
 
+let groupingEnabled = true;
+const nonClusterGroup = L.featureGroup().addTo(map);
+
 const COLORS = {
   online:      '#00ff66',
   onlineText:  '#15803d',
@@ -136,10 +139,12 @@ function updateMarker(monitor) {
   const existing = markers[monitor.id];
   if (existing) {
     clusterGroup.removeLayer(existing);
+    nonClusterGroup.removeLayer(existing);
   }
   const marker = createMarker(monitor);
   markers[monitor.id] = marker;
-  clusterGroup.addLayer(marker);
+  if (groupingEnabled) clusterGroup.addLayer(marker);
+  else nonClusterGroup.addLayer(marker);
 }
 
 // --- Load monitors from API ---
@@ -348,8 +353,14 @@ function renderSvitlobotViewport() {
     }
   }
 
-  if (toRemove.length) clusterGroup.removeLayers(toRemove);
-  if (toAdd.length) clusterGroup.addLayers(toAdd);
+  if (toRemove.length) {
+    if (groupingEnabled) clusterGroup.removeLayers(toRemove);
+    else toRemove.forEach(m => nonClusterGroup.removeLayer(m));
+  }
+  if (toAdd.length) {
+    if (groupingEnabled) clusterGroup.addLayers(toAdd);
+    else toAdd.forEach(m => nonClusterGroup.addLayer(m));
+  }
   svitlobotActiveMarkers = newActive;
 }
 
@@ -376,7 +387,8 @@ async function loadSvitlobot() {
     updateSvitlobotStats(allPoints.length, sbOnline, sbOffline);
 
     // Clear old svitlobot markers and render for current viewport.
-    clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
+    if (groupingEnabled) clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
+    else Object.values(svitlobotActiveMarkers).forEach(m => nonClusterGroup.removeLayer(m));
     svitlobotActiveMarkers = {};
     renderSvitlobotViewport();
   } catch (e) {
@@ -414,7 +426,8 @@ document.getElementById('toggle-svitlobot').addEventListener('change', function 
     const badge = document.getElementById('svitlobot-stats');
     if (badge) badge.style.display = '';
   } else {
-    clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
+    if (groupingEnabled) clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
+    else Object.values(svitlobotActiveMarkers).forEach(m => nonClusterGroup.removeLayer(m));
     svitlobotActiveMarkers = {};
     const badge = document.getElementById('svitlobot-stats');
     if (badge) badge.style.display = 'none';
@@ -423,10 +436,27 @@ document.getElementById('toggle-svitlobot').addEventListener('change', function 
 
 // --- Grouping toggle ---
 document.getElementById('toggle-grouping').addEventListener('change', function () {
-  if (this.checked) {
-    clusterGroup.enableClustering();
+  groupingEnabled = this.checked;
+  if (groupingEnabled) {
+    // Move own monitors into cluster group
+    Object.values(markers).forEach(m => {
+      nonClusterGroup.removeLayer(m);
+      clusterGroup.addLayer(m);
+    });
+    // Clear and re-render svitlobot into cluster group
+    Object.values(svitlobotActiveMarkers).forEach(m => nonClusterGroup.removeLayer(m));
+    svitlobotActiveMarkers = {};
+    renderSvitlobotViewport();
   } else {
-    clusterGroup.disableClustering();
+    // Move own monitors out of cluster group
+    Object.values(markers).forEach(m => {
+      clusterGroup.removeLayer(m);
+      nonClusterGroup.addLayer(m);
+    });
+    // Clear and re-render svitlobot without clustering
+    clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
+    svitlobotActiveMarkers = {};
+    renderSvitlobotViewport();
   }
 });
 

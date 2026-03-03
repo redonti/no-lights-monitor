@@ -38,8 +38,12 @@ const clusterGroup = L.markerClusterGroup({
 });
 map.addLayer(clusterGroup);
 
-let groupingEnabled = true;
+let groupingEnabled = localStorage.getItem('groupingEnabled') !== 'false';
 const nonClusterGroup = L.featureGroup().addTo(map);
+
+function markerShadow() {
+  return groupingEnabled ? '0 4px 12px rgba(0,0,0,0.8)' : '0 1px 3px rgba(0,0,0,0.4)';
+}
 
 const COLORS = {
   online:      '#00ff66',
@@ -92,7 +96,7 @@ function createMarker(monitor) {
       background:${color};
       border:3px solid white;
       border-radius:50%;
-      box-shadow:0 4px 12px rgba(0,0,0,0.8);
+      box-shadow:${markerShadow()};
     "></div>`,
   });
   const marker = L.marker([monitor.lat, monitor.lng], { icon, isOnline: monitor.is_online });
@@ -271,21 +275,25 @@ function parseSvitlobotData(raw) {
   return points;
 }
 
-// Cached icons — only 2 variants needed.
-const svitlobotIcons = {
-  1: L.divIcon({
-    className: '',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-    html: `<div style="width:18px;height:18px;background:${COLORS.online};border:3px solid white;transform:rotate(45deg);box-shadow:0 4px 12px rgba(0,0,0,0.8);"></div>`,
-  }),
-  2: L.divIcon({
-    className: '',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-    html: `<div style="width:18px;height:18px;background:${COLORS.offline};border:3px solid white;transform:rotate(45deg);box-shadow:0 4px 12px rgba(0,0,0,0.8);"></div>`,
-  }),
-};
+// Cached icons — rebuilt when grouping/shadow changes.
+function buildSvitlobotIcons() {
+  const shadow = markerShadow();
+  return {
+    1: L.divIcon({
+      className: '',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+      html: `<div style="width:18px;height:18px;background:${COLORS.online};border:3px solid white;transform:rotate(45deg);box-shadow:${shadow};"></div>`,
+    }),
+    2: L.divIcon({
+      className: '',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+      html: `<div style="width:18px;height:18px;background:${COLORS.offline};border:3px solid white;transform:rotate(45deg);box-shadow:${shadow};"></div>`,
+    }),
+  };
+}
+let svitlobotIcons = buildSvitlobotIcons();
 
 function createSvitlobotMarker(point) {
   const icon = svitlobotIcons[point.light_status] || svitlobotIcons[2];
@@ -435,25 +443,48 @@ document.getElementById('toggle-svitlobot').addEventListener('change', function 
 });
 
 // --- Grouping toggle ---
+document.getElementById('toggle-grouping').checked = groupingEnabled;
+
 document.getElementById('toggle-grouping').addEventListener('change', function () {
   groupingEnabled = this.checked;
+  localStorage.setItem('groupingEnabled', groupingEnabled);
+
+  // Rebuild icon cache with new shadow
+  svitlobotIcons = buildSvitlobotIcons();
+
   if (groupingEnabled) {
-    // Move own monitors into cluster group
+    // Update shadow on own monitors and move into cluster group
     Object.values(markers).forEach(m => {
+      const color = m.options.isOnline ? COLORS.online : COLORS.offline;
+      m.setIcon(L.divIcon({
+        className: '', iconSize: [18, 18], iconAnchor: [9, 9],
+        html: `<div style="width:18px;height:18px;background:${color};border:3px solid white;border-radius:50%;box-shadow:${markerShadow()};"></div>`,
+      }));
       nonClusterGroup.removeLayer(m);
       clusterGroup.addLayer(m);
     });
-    // Clear and re-render svitlobot into cluster group
-    Object.values(svitlobotActiveMarkers).forEach(m => nonClusterGroup.removeLayer(m));
+    // Update shadow on active svitlobot markers and move into cluster group
+    Object.values(svitlobotActiveMarkers).forEach(m => {
+      m.setIcon(svitlobotIcons[m.options.isOnline ? 1 : 2]);
+      nonClusterGroup.removeLayer(m);
+    });
     svitlobotActiveMarkers = {};
     renderSvitlobotViewport();
   } else {
-    // Move own monitors out of cluster group
+    // Update shadow on own monitors and move out of cluster group
     Object.values(markers).forEach(m => {
+      const color = m.options.isOnline ? COLORS.online : COLORS.offline;
+      m.setIcon(L.divIcon({
+        className: '', iconSize: [18, 18], iconAnchor: [9, 9],
+        html: `<div style="width:18px;height:18px;background:${color};border:3px solid white;border-radius:50%;box-shadow:${markerShadow()};"></div>`,
+      }));
       clusterGroup.removeLayer(m);
       nonClusterGroup.addLayer(m);
     });
-    // Clear and re-render svitlobot without clustering
+    // Update shadow on active svitlobot markers and move out of cluster group
+    Object.values(svitlobotActiveMarkers).forEach(m => {
+      m.setIcon(svitlobotIcons[m.options.isOnline ? 1 : 2]);
+    });
     clusterGroup.removeLayers(Object.values(svitlobotActiveMarkers));
     svitlobotActiveMarkers = {};
     renderSvitlobotViewport();

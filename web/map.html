@@ -27,27 +27,49 @@
   <div id="map"></div>
 
   <div class="fixed bottom-6 left-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-3.5 text-sm text-stone-900">
-    <h4 class="font-semibold text-sm mb-2">Легенда</h4>
-    <div class="flex items-center gap-2 my-1 text-stone-600">
-      <div class="w-2.5 h-2.5 rounded-full bg-green-600"></div> Світло є
+    <div class="flex items-center justify-between gap-3">
+      <h4 class="font-semibold text-sm">Легенда</h4>
+      <button id="legend-toggle" onclick="toggleLegend()" class="text-stone-400 hover:text-stone-700 transition-colors leading-none text-base select-none" title="Згорнути">▼</button>
     </div>
-    <div class="flex items-center gap-2 my-1 text-stone-600">
-      <div class="w-2.5 h-2.5 rounded-full bg-red-600"></div> Світла немає
+    <div id="legend-content">
+      <div class="flex items-center gap-2 my-1 mt-2 text-stone-600">
+        <div class="w-2.5 h-2.5 rounded-full bg-green-600"></div> Світло є
+      </div>
+      <div class="flex items-center gap-2 my-1 text-stone-600">
+        <div class="w-2.5 h-2.5 rounded-full bg-red-600"></div> Світла немає
+      </div>
+      <hr class="my-2 border-stone-200" />
+      <div id="last-updated" class="text-xs text-stone-400 mb-2"></div>
+      <h4 class="font-semibold text-sm mb-2">Джерела</h4>
+      <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
+        <input type="checkbox" id="toggle-svitlobot" checked class="accent-sky-500 w-3.5 h-3.5" />
+        <div class="w-2.5 h-2.5 bg-stone-400 rotate-45 shrink-0"></div> <a href="https://svitlobot.in.ua" target="_blank" class="text-sky-500 hover:text-sky-600 no-underline">Svitlobot</a>
+      </label>
+      <hr class="my-2 border-stone-200" />
+      <h4 class="font-semibold text-sm mb-2">Відображення</h4>
+      <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
+        <input type="checkbox" id="toggle-grouping" checked class="accent-stone-700 w-3.5 h-3.5" />
+        Групування маркерів
+      </label>
     </div>
-    <hr class="my-2 border-stone-200" />
-    <div id="last-updated" class="text-xs text-stone-400 mb-2"></div>
-    <h4 class="font-semibold text-sm mb-2">Джерела</h4>
-    <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
-      <input type="checkbox" id="toggle-svitlobot" checked class="accent-sky-500 w-3.5 h-3.5" />
-      <div class="w-2.5 h-2.5 bg-stone-400 rotate-45 shrink-0"></div> <a href="https://svitlobot.in.ua" target="_blank" class="text-sky-500 hover:text-sky-600 no-underline">Svitlobot</a>
-    </label>
-    <hr class="my-2 border-stone-200" />
-    <h4 class="font-semibold text-sm mb-2">Відображення</h4>
-    <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
-      <input type="checkbox" id="toggle-grouping" checked class="accent-stone-700 w-3.5 h-3.5" />
-      Групування маркерів
-    </label>
   </div>
+
+  <script>
+    function toggleLegend() {
+      const content = document.getElementById('legend-content');
+      const btn = document.getElementById('legend-toggle');
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? '' : 'none';
+      btn.textContent = isHidden ? '▼' : '▲';
+      btn.title = isHidden ? 'Згорнути' : 'Розгорнути';
+      localStorage.setItem('legendCollapsed', isHidden ? 'false' : 'true');
+    }
+    if (localStorage.getItem('legendCollapsed') === 'true') {
+      document.getElementById('legend-content').style.display = 'none';
+      document.getElementById('legend-toggle').textContent = '▲';
+      document.getElementById('legend-toggle').title = 'Розгорнути';
+    }
+  </script>
 
   <div id="stats-badge" class="fixed bottom-6 right-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-600 hidden md:block">
     Завантаження...

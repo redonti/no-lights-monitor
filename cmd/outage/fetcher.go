@@ -1,4 +1,4 @@
-package outage
+package main
 
 import (
 	"context"
@@ -9,10 +9,13 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"no-lights-monitor/internal/outage"
 )
 
 const (
-	rawBaseURL = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data"
+	rawBaseURL   = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/main/data"
+	rawImagesURL = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/refs/heads/main/images"
 )
 
 var supportedRegions = []string{"kyiv", "kyiv-region", "odesa", "dnipro"}
@@ -23,17 +26,16 @@ type Fetcher struct {
 	interval time.Duration
 
 	mu   sync.RWMutex
-	data map[string]*RegionData // keyed by regionId
+	data map[string]*outage.RegionData // keyed by regionId
 }
 
-// NewFetcher creates a new Fetcher with the given fetch interval.
-func NewFetcher(intervalSec int) *Fetcher {
+func newFetcher(intervalSec int) *Fetcher {
 	return &Fetcher{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 		interval: time.Duration(intervalSec) * time.Second,
-		data:     make(map[string]*RegionData),
+		data:     make(map[string]*outage.RegionData),
 	}
 }
 
@@ -82,7 +84,7 @@ func (f *Fetcher) fetchRegion(region string) error {
 		return fmt.Errorf("read body: %w", err)
 	}
 
-	var rd RegionData
+	var rd outage.RegionData
 	if err := json.Unmarshal(body, &rd); err != nil {
 		return fmt.Errorf("unmarshal %s: %w", region, err)
 	}
@@ -103,24 +105,57 @@ func (f *Fetcher) fetchRegion(region string) error {
 	return nil
 }
 
-// GetRegionData returns a copy of the region data. Returns nil if not loaded.
-func (f *Fetcher) GetRegionData(region string) *RegionData {
+func (f *Fetcher) getRegionData(region string) *outage.RegionData {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.data[region]
 }
 
-// GetAllRegions returns info about all loaded regions.
-func (f *Fetcher) GetAllRegions() []RegionInfo {
+func (f *Fetcher) getAllRegions() []outage.RegionInfo {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	result := make([]RegionInfo, 0, len(f.data))
+	result := make([]outage.RegionInfo, 0, len(f.data))
 	for _, rd := range f.data {
-		result = append(result, RegionInfo{
+		result = append(result, outage.RegionInfo{
 			RegionID:    rd.RegionID,
 			LastUpdated: rd.LastUpdated,
 		})
 	}
 	return result
+}
+
+// getPhoto proxies a photo request to GitHub, forwarding the If-None-Match header.
+// Returns (nil, "", true, nil) when the image is unchanged (304 Not Modified).
+func (f *Fetcher) getPhoto(region, filename, ifNoneMatch string) (data []byte, etag string, notModified bool, err error) {
+	imageURL := fmt.Sprintf("%s/%s/%s", rawImagesURL, region, filename)
+
+	req, err := http.NewRequest(http.MethodGet, imageURL, nil)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("build request: %w", err)
+	}
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("GET %s: %w", imageURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, "", true, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", false, fmt.Errorf("GET %s: status %d", imageURL, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("read body: %w", err)
+	}
+
+	return body, resp.Header.Get("ETag"), false, nil
 }

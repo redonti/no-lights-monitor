@@ -72,6 +72,43 @@ func (c *Client) GetGroups(region string) ([]GroupInfo, error) {
 	return result.Groups, nil
 }
 
+// GetGroupPhoto fetches the outage schedule photo for a group via the outage service.
+// Pass storedETag (may be empty) to enable 304 Not Modified responses.
+// Returns (nil, "", true, nil) when the image is unchanged.
+func (c *Client) GetGroupPhoto(region, group, storedETag string) (data []byte, etag string, notModified bool, err error) {
+	url := fmt.Sprintf("%s/api/outage/%s/%s/photo", c.baseURL, region, group)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("build request: %w", err)
+	}
+	if storedETag != "" {
+		req.Header.Set("If-None-Match", storedETag)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("GET %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, "", true, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, "", false, fmt.Errorf("outage service returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("read body: %w", err)
+	}
+
+	return body, resp.Header.Get("ETag"), false, nil
+}
+
 // RegionsResponse wraps the regions list response.
 type RegionsResponse []RegionInfo
 

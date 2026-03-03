@@ -1,5 +1,21 @@
 package outage
 
+import (
+	"regexp"
+	"strings"
+)
+
+// reLetterDigit matches the boundary between letters and digits.
+var reLetterDigit = regexp.MustCompile(`([a-z])(\d)`)
+
+// GroupToFilename converts a group ID like "GPV1.1" to "gpv-1-1-emergency.png".
+func GroupToFilename(group string) string {
+	s := strings.ToLower(group)
+	s = reLetterDigit.ReplaceAllString(s, "${1}-${2}")
+	s = strings.ReplaceAll(s, ".", "-")
+	return s + "-emergency.png"
+}
+
 // RegionData is the top-level JSON structure from the outage-data-ua repo.
 type RegionData struct {
 	RegionID    string `json:"regionId"`

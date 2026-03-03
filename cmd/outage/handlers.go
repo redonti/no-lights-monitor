@@ -1,4 +1,4 @@
-package outage
+package main
 
 import (
 	"fmt"
@@ -6,25 +6,25 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+
+	"no-lights-monitor/internal/outage"
 )
 
-// Handlers holds the outage service dependencies.
-type Handlers struct {
-	Fetcher *Fetcher
+type handlers struct {
+	fetcher *Fetcher
 }
 
-// RegisterRoutes registers outage API routes on the given Fiber app group.
-func (h *Handlers) RegisterRoutes(api fiber.Router) {
-	outage := api.Group("/outage")
-	outage.Get("/regions", h.GetRegions)
-	outage.Get("/:region/groups", h.GetGroups)
-	outage.Get("/:region", h.GetRegionFact)
-	outage.Get("/:region/:group", h.GetGroupFact)
+func (h *handlers) registerRoutes(api fiber.Router) {
+	g := api.Group("/outage")
+	g.Get("/regions", h.getRegions)
+	g.Get("/:region/groups", h.getGroups)
+	g.Get("/:region", h.getRegionFact)
+	g.Get("/:region/:group/photo", h.getGroupPhoto)
+	g.Get("/:region/:group", h.getGroupFact)
 }
 
-// GetRegions returns a list of available regions.
-func (h *Handlers) GetRegions(c *fiber.Ctx) error {
-	regions := h.Fetcher.GetAllRegions()
+func (h *handlers) getRegions(c *fiber.Ctx) error {
+	regions := h.fetcher.getAllRegions()
 	if len(regions) == 0 {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "outage data not yet loaded",
@@ -33,11 +33,10 @@ func (h *Handlers) GetRegions(c *fiber.Ctx) error {
 	return c.JSON(regions)
 }
 
-// GetGroups returns the list of available group IDs for a region.
-func (h *Handlers) GetGroups(c *fiber.Ctx) error {
+func (h *handlers) getGroups(c *fiber.Ctx) error {
 	region := c.Params("region")
 
-	rd := h.Fetcher.GetRegionData(region)
+	rd := h.fetcher.getRegionData(region)
 	if rd == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": fmt.Sprintf("region %q not found", region),
@@ -52,13 +51,13 @@ func (h *Handlers) GetGroups(c *fiber.Ctx) error {
 		})
 	}
 
-	groups := make([]GroupInfo, 0, len(dayData))
+	groups := make([]outage.GroupInfo, 0, len(dayData))
 	for g := range dayData {
 		name := g
 		if n, ok := rd.Preset.SchNames[g]; ok {
 			name = n
 		}
-		groups = append(groups, GroupInfo{ID: g, Name: name})
+		groups = append(groups, outage.GroupInfo{ID: g, Name: name})
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].ID < groups[j].ID })
 
@@ -68,11 +67,10 @@ func (h *Handlers) GetGroups(c *fiber.Ctx) error {
 	})
 }
 
-// GetRegionFact returns all groups' hourly fact data for a region.
-func (h *Handlers) GetRegionFact(c *fiber.Ctx) error {
+func (h *handlers) getRegionFact(c *fiber.Ctx) error {
 	region := c.Params("region")
 
-	rd := h.Fetcher.GetRegionData(region)
+	rd := h.fetcher.getRegionData(region)
 	if rd == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": fmt.Sprintf("region %q not found", region),
@@ -87,7 +85,7 @@ func (h *Handlers) GetRegionFact(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(RegionFactSummary{
+	return c.JSON(outage.RegionFactSummary{
 		Region:      rd.RegionID,
 		LastUpdated: rd.LastUpdated,
 		FactUpdate:  rd.Fact.Update,
@@ -95,12 +93,11 @@ func (h *Handlers) GetRegionFact(c *fiber.Ctx) error {
 	})
 }
 
-// GetGroupFact returns hourly fact data for a specific group in a region.
-func (h *Handlers) GetGroupFact(c *fiber.Ctx) error {
+func (h *handlers) getGroupFact(c *fiber.Ctx) error {
 	region := c.Params("region")
 	group := c.Params("group")
 
-	rd := h.Fetcher.GetRegionData(region)
+	rd := h.fetcher.getRegionData(region)
 	if rd == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": fmt.Sprintf("region %q not found", region),
@@ -122,7 +119,7 @@ func (h *Handlers) GetGroupFact(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(GroupHourlyFact{
+	return c.JSON(outage.GroupHourlyFact{
 		Region:      rd.RegionID,
 		Group:       group,
 		Date:        todayKey,
@@ -130,4 +127,22 @@ func (h *Handlers) GetGroupFact(c *fiber.Ctx) error {
 		FactUpdate:  rd.Fact.Update,
 		Hours:       hours,
 	})
+}
+
+func (h *handlers) getGroupPhoto(c *fiber.Ctx) error {
+	region := c.Params("region")
+	group := c.Params("group")
+	filename := outage.GroupToFilename(group)
+
+	data, etag, notModified, err := h.fetcher.getPhoto(region, filename, c.Get("If-None-Match"))
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": err.Error()})
+	}
+	if notModified {
+		return c.SendStatus(fiber.StatusNotModified)
+	}
+
+	c.Set("ETag", etag)
+	c.Set("Content-Type", "image/png")
+	return c.Send(data)
 }

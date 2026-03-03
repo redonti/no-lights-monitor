@@ -17,6 +17,7 @@ import (
 	"no-lights-monitor/cmd/worker/heartbeat"
 	"no-lights-monitor/cmd/worker/inactivity"
 	"no-lights-monitor/internal/mq"
+	"no-lights-monitor/internal/outage"
 	"no-lights-monitor/cmd/worker/outagephoto"
 )
 
@@ -89,7 +90,8 @@ func main() {
 	log.Println("graph updater started")
 
 	// --- Outage photo updater (hourly) ---
-	photoUpdater := outagephoto.NewUpdater(db, publisher)
+	outageClient := outage.NewClient(cfg.OutageServiceURL)
+	photoUpdater := outagephoto.NewUpdater(db, publisher, outageClient)
 	go photoUpdater.Start(ctx)
 	log.Println("outage photo updater started")
 

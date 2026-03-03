@@ -13,7 +13,6 @@ import (
 	"github.com/joho/godotenv"
 
 	"no-lights-monitor/internal/config"
-	"no-lights-monitor/internal/outage"
 )
 
 func main() {
@@ -25,7 +24,7 @@ func main() {
 	defer cancel()
 
 	// --- Outage data fetcher ---
-	fetcher := outage.NewFetcher(cfg.OutageFetchInterval)
+	fetcher := newFetcher(cfg.OutageFetchInterval)
 	go fetcher.Start(ctx)
 	log.Printf("outage fetcher started (interval: %ds)", cfg.OutageFetchInterval)
 
@@ -41,8 +40,8 @@ func main() {
 
 	// Outage API routes
 	api := app.Group("/api")
-	h := &outage.Handlers{Fetcher: fetcher}
-	h.RegisterRoutes(api)
+	h := &handlers{fetcher: fetcher}
+	h.registerRoutes(api)
 
 	// --- Graceful shutdown ---
 	go func() {

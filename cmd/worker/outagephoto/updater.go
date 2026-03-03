@@ -3,20 +3,13 @@ package outagephoto
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/models"
 	"no-lights-monitor/internal/mq"
-)
-
-const (
-	ghRawImageURL = "https://raw.githubusercontent.com/Baskerville42/outage-data-ua/refs/heads/main/images"
+	"no-lights-monitor/internal/outage"
 )
 
 // Updater is a background service that fetches outage schedule images
@@ -24,17 +17,15 @@ const (
 type Updater struct {
 	db     *database.DB
 	pub    *mq.Publisher
-	client *http.Client
+	outage *outage.Client
 }
 
 // NewUpdater creates a new outage photo updater.
-func NewUpdater(db *database.DB, pub *mq.Publisher) *Updater {
+func NewUpdater(db *database.DB, pub *mq.Publisher, outageClient *outage.Client) *Updater {
 	return &Updater{
-		db:  db,
-		pub: pub,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		db:     db,
+		pub:    pub,
+		outage: outageClient,
 	}
 }
 
@@ -61,13 +52,6 @@ func (u *Updater) Start(ctx context.Context) {
 			u.runAll(ctx)
 		}
 	}
-}
-
-// fetchResult holds a downloaded image and its ETag, or signals not-modified.
-type fetchResult struct {
-	notModified bool
-	data        []byte
-	etag        string
 }
 
 func (u *Updater) runAll(ctx context.Context) {
@@ -124,8 +108,6 @@ func (u *Updater) runAll(ctx context.Context) {
 }
 
 func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
-	filename := groupToFilename(m.OutageGroup)
-
 	// If the existing photo is from a previous day, delete it and force a fresh fetch.
 	storedETag := m.OutagePhotoETag
 	if m.OutagePhotoMessageID != 0 && m.OutagePhotoUpdatedAt != nil {
@@ -153,14 +135,16 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 		}
 	}
 
-	result, err := u.fetchImage(m.OutageRegion, filename, storedETag)
+	data, etag, notModified, err := u.outage.GetGroupPhoto(m.OutageRegion, m.OutageGroup, storedETag)
 	if err != nil {
-		return fmt.Errorf("fetch image: %w", err)
+		return fmt.Errorf("fetch photo: %w", err)
 	}
 
-	if result.notModified {
+	if notModified {
 		return nil
 	}
+
+	filename := outage.GroupToFilename(m.OutageGroup)
 
 	// Determine action: edit existing or send new.
 	action := mq.OutagePhotoSend
@@ -174,9 +158,9 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 		MonitorName: m.Name,
 		Action:      action,
 		OldMsgID:    m.OutagePhotoMessageID,
-		ImageData:   result.data,
+		ImageData:   data,
 		Filename:    filename,
-		ETag:        result.etag,
+		ETag:        etag,
 	}
 	if err := u.pub.Publish(ctx, mq.RoutingOutagePhoto, msg); err != nil {
 		return fmt.Errorf("publish outage photo: %w", err)
@@ -184,49 +168,4 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 
 	log.Printf("[outage-photo] monitor %d: published %s action", m.ID, action)
 	return nil
-}
-
-// fetchImage downloads an image using a conditional GET (If-None-Match).
-func (u *Updater) fetchImage(region, filename, storedETag string) (*fetchResult, error) {
-	imageURL := fmt.Sprintf("%s/%s/%s", ghRawImageURL, region, filename)
-
-	req, err := http.NewRequest(http.MethodGet, imageURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	if storedETag != "" {
-		req.Header.Set("If-None-Match", storedETag)
-	}
-
-	resp, err := u.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("GET %s: %w", imageURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotModified {
-		return &fetchResult{notModified: true}, nil
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: status %d", imageURL, resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-
-	return &fetchResult{data: data, etag: resp.Header.Get("ETag")}, nil
-}
-
-// reLetterDigit matches the boundary between letters and digits.
-var reLetterDigit = regexp.MustCompile(`([a-z])(\d)`)
-
-// groupToFilename converts a group ID like "GPV1.1" to "gpv-1-1-emergency.png".
-func groupToFilename(group string) string {
-	s := strings.ToLower(group)
-	s = reLetterDigit.ReplaceAllString(s, "${1}-${2}")
-	s = strings.ReplaceAll(s, ".", "-")
-	return s + "-emergency.png"
 }

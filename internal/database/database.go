@@ -19,6 +19,7 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	graph_enabled, last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start,
 	outage_photo_message_id, outage_photo_updated_at, outage_photo_etag, settings_token,
 	dtek_enabled, dtek_region, dtek_city, dtek_street, dtek_house, dtek_outage_notified_at,
+	dtek_outage_recheck_at, dtek_outage_message_id,
 	created_at`
 
 // monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
@@ -29,6 +30,7 @@ const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.la
 	m.graph_enabled, m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start,
 	m.outage_photo_message_id, m.outage_photo_updated_at, m.outage_photo_etag, m.settings_token,
 	m.dtek_enabled, m.dtek_region, m.dtek_city, m.dtek_street, m.dtek_house, m.dtek_outage_notified_at,
+	m.dtek_outage_recheck_at, m.dtek_outage_message_id,
 	m.created_at`
 
 const userColumns = `id, telegram_id, username, first_name, created_at`
@@ -107,6 +109,8 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_street TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_house TEXT NOT NULL DEFAULT '';
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_notified_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_recheck_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_message_id BIGINT NOT NULL DEFAULT 0;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_settings_token ON monitors(settings_token);
@@ -441,11 +445,30 @@ func (db *DB) SetMonitorDtekEnabled(ctx context.Context, id int64, enabled bool)
 	return err
 }
 
-// SetMonitorDtekOutageNotifiedAt records when a DTEK outage notification was sent.
-func (db *DB) SetMonitorDtekOutageNotifiedAt(ctx context.Context, id int64, t time.Time) error {
+// SaveDtekOutageDetected records the initial DTEK outage detection: sets notified_at and
+// recheck_at (the parsed outage end time, or a fallback). Call this on first detection.
+func (db *DB) SaveDtekOutageDetected(ctx context.Context, id int64, notifiedAt time.Time, recheckAt time.Time) error {
 	_, err := db.Pool.Exec(ctx, `
-		UPDATE monitors SET dtek_outage_notified_at = $2 WHERE id = $1
-	`, id, t)
+		UPDATE monitors SET dtek_outage_notified_at = $2, dtek_outage_recheck_at = $3 WHERE id = $1
+	`, id, notifiedAt, recheckAt)
+	return err
+}
+
+// SetMonitorDtekOutageMessageID saves the Telegram message ID of the sent DTEK notification.
+// Called by the bot service after successfully sending the message.
+func (db *DB) SetMonitorDtekOutageMessageID(ctx context.Context, id int64, msgID int) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_outage_message_id = $2 WHERE id = $1
+	`, id, msgID)
+	return err
+}
+
+// UpdateDtekOutageRecheck advances the re-check time after a successful update check.
+// Pass the new recheckAt (parsed end time or 1h snooze) to prevent immediate re-polling.
+func (db *DB) UpdateDtekOutageRecheck(ctx context.Context, id int64, recheckAt time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_outage_recheck_at = $2 WHERE id = $1
+	`, id, recheckAt)
 	return err
 }
 
@@ -475,7 +498,13 @@ func (db *DB) GetDtekPendingMonitors(ctx context.Context) ([]*models.Monitor, er
 		  AND dtek_region != ''
 		  AND dtek_street != ''
 		  AND dtek_house != ''
-		  AND (dtek_outage_notified_at IS NULL OR dtek_outage_notified_at < last_status_change_at)
+		  AND (
+		    -- Never notified for this offline period.
+		    (dtek_outage_notified_at IS NULL OR dtek_outage_notified_at < last_status_change_at)
+		    OR
+		    -- Already notified, but re-check time has passed — check for updates.
+		    (dtek_outage_notified_at >= last_status_change_at AND dtek_outage_recheck_at IS NOT NULL AND dtek_outage_recheck_at < NOW())
+		  )
 		ORDER BY id
 	`)
 	if err != nil {

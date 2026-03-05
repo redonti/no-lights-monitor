@@ -45,6 +45,8 @@ type Monitor struct {
 	DtekStreet           string     `json:"dtek_street" db:"dtek_street"`
 	DtekHouse            string     `json:"dtek_house" db:"dtek_house"`
 	DtekOutageNotifiedAt *time.Time `json:"dtek_outage_notified_at,omitempty" db:"dtek_outage_notified_at"`
+	DtekOutageRecheckAt  *time.Time `json:"dtek_outage_recheck_at,omitempty" db:"dtek_outage_recheck_at"`
+	DtekOutageMessageID  int        `json:"dtek_outage_message_id" db:"dtek_outage_message_id"`
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 }
 

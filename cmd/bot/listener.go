@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"html"
 	"io"
 	"log"
 	"strings"
@@ -87,7 +89,7 @@ func (l *listener) start(ctx context.Context) {
 			if !ok {
 				return
 			}
-			l.handleDtekOutage(d.Body)
+			l.handleDtekOutage(ctx, d.Body)
 			d.Ack(false)
 		case d, ok := <-inactiveCh:
 			if !ok {
@@ -101,16 +103,63 @@ func (l *listener) start(ctx context.Context) {
 
 // ── DTEK outage handler ──────────────────────────────────────────────
 
-func (l *listener) handleDtekOutage(payload []byte) {
+func (l *listener) handleDtekOutage(ctx context.Context, payload []byte) {
 	var msg mq.DtekOutageMsg
 	if err := json.Unmarshal(payload, &msg); err != nil {
 		log.Printf("[listener] bad dtek_outage message: %v", err)
 		return
 	}
-	l.notifier.NotifyDtekOutage(
-		msg.MonitorID, msg.ChannelID, msg.OwnerTelegramID,
-		msg.MonitorName, msg.SubType, msg.StartDate, msg.EndDate,
-	)
+	switch msg.Action {
+	case mq.DtekOutageUpdate:
+		l.editDtekOutage(ctx, msg)
+	default:
+		l.sendDtekOutage(ctx, msg)
+	}
+}
+
+func (l *listener) sendDtekOutage(ctx context.Context, msg mq.DtekOutageMsg) {
+	if msg.ChannelID == 0 {
+		return
+	}
+	text := buildDtekOutageText(msg.MonitorName, msg.SubType, msg.StartDate, msg.EndDate)
+	chat := &tele.Chat{ID: msg.ChannelID}
+	sent, err := l.bot.Send(chat, text, &tele.SendOptions{ParseMode: tele.ModeHTML})
+	if err != nil {
+		log.Printf("[listener] dtek monitor %d: failed to send to channel: %v", msg.MonitorID, err)
+		return
+	}
+	if err := l.db.SetMonitorDtekOutageMessageID(ctx, msg.MonitorID, sent.ID); err != nil {
+		log.Printf("[listener] dtek monitor %d: failed to save message id: %v", msg.MonitorID, err)
+	}
+	log.Printf("[listener] dtek monitor %d: sent (msg %d)", msg.MonitorID, sent.ID)
+}
+
+func (l *listener) editDtekOutage(ctx context.Context, msg mq.DtekOutageMsg) {
+	if msg.OldMsgID == 0 || msg.ChannelID == 0 {
+		// No existing channel message to edit — nothing to do.
+		return
+	}
+	text := buildDtekOutageText(msg.MonitorName, msg.SubType, msg.StartDate, msg.EndDate)
+	editMsg := &tele.Message{ID: msg.OldMsgID, Chat: &tele.Chat{ID: msg.ChannelID}}
+	_, err := l.bot.Edit(editMsg, text, &tele.SendOptions{ParseMode: tele.ModeHTML})
+	if err != nil {
+		if strings.Contains(err.Error(), "message is not modified") {
+			return
+		}
+		log.Printf("[listener] dtek monitor %d: failed to edit msg %d: %v", msg.MonitorID, msg.OldMsgID, err)
+	} else {
+		log.Printf("[listener] dtek monitor %d: updated (msg %d)", msg.MonitorID, msg.OldMsgID)
+	}
+}
+
+// buildDtekOutageText builds the HTML text for a DTEK outage notification.
+func buildDtekOutageText(monitorName, subType, startDate, endDate string) string {
+	const msgWithTime = "⚡ <b>Відключення підтверджено ДТЕК</b>\n\n<b>%s</b>\n\n<i>%s</i>\n%s"
+	const msgNoTime = "⚡ <b>Відключення підтверджено ДТЕК</b>\n\n<b>%s</b>\n\n<i>%s</i>"
+	if startDate != "" && endDate != "" {
+		return fmt.Sprintf(msgWithTime, html.EscapeString(monitorName), html.EscapeString(subType), startDate+" — "+endDate)
+	}
+	return fmt.Sprintf(msgNoTime, html.EscapeString(monitorName), html.EscapeString(subType))
 }
 
 // ── Inactive pause handler ───────────────────────────────────────────

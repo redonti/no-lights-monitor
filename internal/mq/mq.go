@@ -87,15 +87,25 @@ type GraphRequestMsg struct {
 	ChannelID int64 `json:"channel_id"`
 }
 
-// DtekOutageMsg is published by the worker when a DTEK unplanned outage is detected.
+// DtekOutageAction specifies what the bot should do with a DTEK outage message.
+type DtekOutageAction string
+
+const (
+	DtekOutageSend   DtekOutageAction = "send"
+	DtekOutageUpdate DtekOutageAction = "update"
+)
+
+// DtekOutageMsg is published by the worker when a DTEK unplanned outage is detected or updated.
 type DtekOutageMsg struct {
-	MonitorID       int64  `json:"monitor_id"`
-	ChannelID       int64  `json:"channel_id"`
-	OwnerTelegramID int64  `json:"owner_telegram_id"`
-	MonitorName     string `json:"monitor_name"`
-	SubType         string `json:"sub_type"`
-	StartDate       string `json:"start_date"`
-	EndDate         string `json:"end_date"`
+	Action          DtekOutageAction `json:"action"`
+	OldMsgID        int              `json:"old_msg_id"`
+	MonitorID       int64            `json:"monitor_id"`
+	ChannelID       int64            `json:"channel_id"`
+	OwnerTelegramID int64            `json:"owner_telegram_id"`
+	MonitorName     string           `json:"monitor_name"`
+	SubType         string           `json:"sub_type"`
+	StartDate       string           `json:"start_date"`
+	EndDate         string           `json:"end_date"`
 }
 
 // InactivePauseMsg is published by the worker when a monitor is auto-paused

@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"no-lights-monitor/cmd/bot/bot"
+	"no-lights-monitor/cmd/bot/channeldesc"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/mq"
@@ -78,6 +79,11 @@ func main() {
 	listener := newListener(tgBot.TeleBot(), db, outageClient, mqConsumer)
 	go listener.start(ctx)
 	log.Println("rabbitmq listener started")
+
+	// --- Channel description checker (daily at 14:00 Kyiv) ---
+	descChecker := channeldesc.NewChecker(tgBot.TeleBot(), db, cfg.BaseURL)
+	go descChecker.Start(ctx)
+	log.Println("channel description checker started")
 
 	// --- Graceful shutdown ---
 	quit := make(chan os.Signal, 1)

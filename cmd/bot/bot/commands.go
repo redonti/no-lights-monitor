@@ -16,12 +16,12 @@ import (
 
 func (b *Bot) handleStart(c tele.Context) error {
 	log.Printf("[bot] /start from user %d (@%s)", c.Sender().ID, c.Sender().Username)
-	return c.Send(msgStart, tele.ModeHTML, mainMenu)
+	return c.Send(fmt.Sprintf(msgStart, b.baseURL), tele.ModeHTML, mainMenu)
 }
 
 func (b *Bot) handleHelp(c tele.Context) error {
 	log.Printf("[bot] /help from user %d (@%s)", c.Sender().ID, c.Sender().Username)
-	return c.Send(msgHelp, htmlOpts)
+	return c.Send(fmt.Sprintf(msgHelp, b.baseURL), htmlOpts)
 }
 
 func (b *Bot) handleCancel(c tele.Context) error {

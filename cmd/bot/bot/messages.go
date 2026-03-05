@@ -17,6 +17,7 @@ const msgStart = `<b>Вітаю в No-Lights Monitor!</b>
 /delete - Видалити монітор
 /help - Детальніше
 
+🌐 %s
 💬 Питання, ідеї? @lights_monitor_chat`
 
 const msgHelp = `<b>Як це працює:</b>
@@ -38,6 +39,7 @@ const msgHelp = `<b>Як це працює:</b>
 /delete — видалити монітор назавжди
 /cancel — скасувати поточну операцію
 
+🌐 %s
 💬 Питання, ідеї? @lights_monitor_chat`
 
 // ── Generic / errors ────────────────────────────────────────────────

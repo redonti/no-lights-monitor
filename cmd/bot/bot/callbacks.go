@@ -84,6 +84,8 @@ func (b *Bot) handleCallback(c tele.Context) error {
 		return b.onCallbackMapHide(ctx, c, targetMonitor)
 	case "map_show":
 		return b.onCallbackMapShow(ctx, c, targetMonitor)
+	case "threshold":
+		return b.onCallbackThreshold(ctx, c, parts, targetMonitor)
 	case "test":
 		return b.onCallbackTest(c, targetMonitor)
 	default:
@@ -213,6 +215,18 @@ func (b *Bot) renderEditMenu(c tele.Context, m *models.Monitor) error {
 			{Text: graphBtnText, Data: fmt.Sprintf("edit_graph:%d", m.ID)},
 		})
 	}
+	// Offline threshold toggle.
+	nextThreshold := 300
+	if m.OfflineThresholdSec == 300 || m.OfflineThresholdSec == 0 {
+		nextThreshold = 150
+	}
+	currentLabel := msgThreshold300
+	if m.OfflineThresholdSec == 150 {
+		currentLabel = msgThreshold150
+	}
+	rows = append(rows, []tele.InlineButton{
+		{Text: fmt.Sprintf(msgEditBtnThreshold, currentLabel), Data: fmt.Sprintf("threshold:%d:%d", m.ID, nextThreshold)},
+	})
 	// Outage group button.
 	rows = append(rows, []tele.InlineButton{
 		{Text: msgEditBtnOutage, Data: fmt.Sprintf("edit_outage:%d", m.ID)},
@@ -417,6 +431,27 @@ func (b *Bot) onCallbackMapShow(ctx context.Context, c tele.Context, m *models.M
 	}
 	_ = c.Respond(&tele.CallbackResponse{})
 	m.IsPublic = true
+	return b.renderEditMenu(c, m)
+}
+
+func (b *Bot) onCallbackThreshold(ctx context.Context, c tele.Context, parts []string, m *models.Monitor) error {
+	_ = c.Respond(&tele.CallbackResponse{})
+	if len(parts) < 3 {
+		return c.Edit(msgInvalidFormat, tele.ModeHTML, &tele.ReplyMarkup{})
+	}
+	sec, err := strconv.Atoi(parts[2])
+	if err != nil || (sec != 150 && sec != 300) {
+		return c.Edit(msgInvalidFormat, tele.ModeHTML, &tele.ReplyMarkup{})
+	}
+	if err := b.db.SetMonitorThreshold(ctx, m.ID, sec); err != nil {
+		return c.Edit(msgThresholdError, tele.ModeHTML, &tele.ReplyMarkup{})
+	}
+	label := msgThreshold300
+	if sec == 150 {
+		label = msgThreshold150
+	}
+	_ = c.Edit(fmt.Sprintf(msgThresholdSet, label), tele.ModeHTML, &tele.ReplyMarkup{})
+	m.OfflineThresholdSec = sec
 	return b.renderEditMenu(c, m)
 }
 

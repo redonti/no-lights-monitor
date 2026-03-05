@@ -30,14 +30,15 @@ type monitorInfo struct {
 	Longitude   float64
 	MonitorType string // "heartbeat" or "ping"
 	PingTarget  string // IP/hostname for ping monitors
-	IsOnline       bool
-	IsActive       bool // whether monitoring is enabled
-	NotifyAddress  bool
-	OutageRegion   string
-	OutageGroup    string
-	NotifyOutage   bool
-	LastChange  time.Time
-	mu          sync.Mutex
+	IsOnline            bool
+	IsActive            bool // whether monitoring is enabled
+	NotifyAddress       bool
+	OutageRegion        string
+	OutageGroup         string
+	NotifyOutage        bool
+	OfflineThresholdSec int
+	LastChange          time.Time
+	mu                  sync.Mutex
 }
 
 // Service handles heartbeat pings and offline detection.
@@ -77,21 +78,22 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 
 	for _, m := range monitors {
 		s.monitors.Store(m.Token, &monitorInfo{
-			ID:          m.ID,
-			ChannelID:   m.ChannelID,
-			Name:        m.Name,
-			Address:     m.Address,
-			Latitude:    m.Latitude,
-			Longitude:   m.Longitude,
-			MonitorType: m.MonitorType,
-			PingTarget:  m.PingTarget,
-			IsOnline:      m.IsOnline,
-			IsActive:      m.IsActive,
-			NotifyAddress: m.NotifyAddress,
-			OutageRegion:  m.OutageRegion,
-			OutageGroup:   m.OutageGroup,
-			NotifyOutage:  m.NotifyOutage,
-			LastChange:    m.LastStatusChangeAt,
+			ID:                  m.ID,
+			ChannelID:           m.ChannelID,
+			Name:                m.Name,
+			Address:             m.Address,
+			Latitude:            m.Latitude,
+			Longitude:           m.Longitude,
+			MonitorType:         m.MonitorType,
+			PingTarget:          m.PingTarget,
+			IsOnline:            m.IsOnline,
+			IsActive:            m.IsActive,
+			NotifyAddress:       m.NotifyAddress,
+			OutageRegion:        m.OutageRegion,
+			OutageGroup:         m.OutageGroup,
+			NotifyOutage:        m.NotifyOutage,
+			OfflineThresholdSec: m.OfflineThresholdSec,
+			LastChange:          m.LastStatusChangeAt,
 		})
 	}
 	log.Printf("[heartbeat] loaded %d monitors into memory (grace period: %s)", len(monitors), s.threshold)
@@ -101,21 +103,22 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 // RegisterMonitor adds a new monitor to the in-memory map (called after DB insert).
 func (s *Service) RegisterMonitor(m *models.Monitor) {
 	s.monitors.Store(m.Token, &monitorInfo{
-		ID:          m.ID,
-		ChannelID:   m.ChannelID,
-		Name:        m.Name,
-		Address:     m.Address,
-		Latitude:    m.Latitude,
-		Longitude:   m.Longitude,
-		MonitorType: m.MonitorType,
-		PingTarget:  m.PingTarget,
-		IsOnline:      false,
-		IsActive:      m.IsActive,
-		NotifyAddress: m.NotifyAddress,
-		OutageRegion:  m.OutageRegion,
-		OutageGroup:   m.OutageGroup,
-		NotifyOutage:  m.NotifyOutage,
-		LastChange:    m.LastStatusChangeAt,
+		ID:                  m.ID,
+		ChannelID:           m.ChannelID,
+		Name:                m.Name,
+		Address:             m.Address,
+		Latitude:            m.Latitude,
+		Longitude:           m.Longitude,
+		MonitorType:         m.MonitorType,
+		PingTarget:          m.PingTarget,
+		IsOnline:            false,
+		IsActive:            m.IsActive,
+		NotifyAddress:       m.NotifyAddress,
+		OutageRegion:        m.OutageRegion,
+		OutageGroup:         m.OutageGroup,
+		NotifyOutage:        m.NotifyOutage,
+		OfflineThresholdSec: m.OfflineThresholdSec,
+		LastChange:          m.LastStatusChangeAt,
 	})
 }
 
@@ -161,6 +164,19 @@ func (s *Service) SetMonitorOutageGroup(token, region, group string) bool {
 	return true
 }
 
+// SetMonitorThreshold updates the offline threshold of a monitor in memory.
+func (s *Service) SetMonitorThreshold(token string, thresholdSec int) bool {
+	val, ok := s.monitors.Load(token)
+	if !ok {
+		return false
+	}
+	info := val.(*monitorInfo)
+	info.mu.Lock()
+	info.OfflineThresholdSec = thresholdSec
+	info.mu.Unlock()
+	return true
+}
+
 // SetMonitorNotifyOutage updates the notify_outage flag of a monitor in memory.
 func (s *Service) SetMonitorNotifyOutage(token string, notifyOutage bool) bool {
 	val, ok := s.monitors.Load(token)
@@ -199,21 +215,22 @@ func (s *Service) refreshMonitors(ctx context.Context) {
 		if !ok {
 			// New monitor — add to map.
 			s.monitors.Store(m.Token, &monitorInfo{
-				ID:            m.ID,
-				ChannelID:     m.ChannelID,
-				Name:          m.Name,
-				Address:       m.Address,
-				Latitude:      m.Latitude,
-				Longitude:     m.Longitude,
-				MonitorType:   m.MonitorType,
-				PingTarget:    m.PingTarget,
-				IsOnline:      m.IsOnline,
-				IsActive:      m.IsActive,
-				NotifyAddress: m.NotifyAddress,
-				OutageRegion:  m.OutageRegion,
-				OutageGroup:   m.OutageGroup,
-				NotifyOutage:  m.NotifyOutage,
-				LastChange:    m.LastStatusChangeAt,
+				ID:                  m.ID,
+				ChannelID:           m.ChannelID,
+				Name:                m.Name,
+				Address:             m.Address,
+				Latitude:            m.Latitude,
+				Longitude:           m.Longitude,
+				MonitorType:         m.MonitorType,
+				PingTarget:          m.PingTarget,
+				IsOnline:            m.IsOnline,
+				IsActive:            m.IsActive,
+				NotifyAddress:       m.NotifyAddress,
+				OutageRegion:        m.OutageRegion,
+				OutageGroup:         m.OutageGroup,
+				NotifyOutage:        m.NotifyOutage,
+				OfflineThresholdSec: m.OfflineThresholdSec,
+				LastChange:          m.LastStatusChangeAt,
 			})
 			continue
 		}
@@ -232,6 +249,7 @@ func (s *Service) refreshMonitors(ctx context.Context) {
 		info.OutageGroup = m.OutageGroup
 		info.NotifyOutage = m.NotifyOutage
 		info.PingTarget = m.PingTarget
+		info.OfflineThresholdSec = m.OfflineThresholdSec
 		info.mu.Unlock()
 	}
 
@@ -378,7 +396,12 @@ func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, mon
 		}
 	}
 
-	isFresh := now.Sub(lastHB) <= s.threshold
+	threshold := s.threshold
+	if info.OfflineThresholdSec > 0 {
+		threshold = time.Duration(info.OfflineThresholdSec) * time.Second
+	}
+
+	isFresh := now.Sub(lastHB) <= threshold
 
 	info.mu.Lock()
 
@@ -392,7 +415,7 @@ func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, mon
 		info.IsOnline = false
 		offlineAt := lastHB
 		if offlineAt.IsZero() {
-			offlineAt = now.Add(-s.threshold)
+			offlineAt = now.Add(-threshold)
 		}
 		info.LastChange = offlineAt
 		statusChanged = true

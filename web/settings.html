@@ -97,6 +97,16 @@
           </label>
         </div>
 
+        <!-- Offline threshold -->
+        <div class="mb-5">
+          <label class="block text-sm font-medium text-stone-700 mb-1.5">Поріг офлайн</label>
+          <div class="flex gap-2">
+            <button id="btn-threshold-150" onclick="saveThreshold(150)" class="flex-1 text-sm font-medium px-4 py-2 rounded-lg border transition-colors">2.5 хв</button>
+            <button id="btn-threshold-300" onclick="saveThreshold(300)" class="flex-1 text-sm font-medium px-4 py-2 rounded-lg border transition-colors">5 хв</button>
+          </div>
+          <p class="text-xs text-stone-400 mt-1">Скільки часу без пінгу перед тим, як монітор перейде в офлайн.</p>
+        </div>
+
         <!-- Outage group -->
         <div class="mb-2">
           <label class="block text-sm font-medium text-stone-700 mb-1.5">Група відключень</label>
@@ -439,6 +449,10 @@
       document.getElementById('toggle-notify-address').checked = m.notify_address;
       document.getElementById('toggle-graph').checked = m.graph_enabled;
 
+      // Threshold buttons
+      const sec = m.offline_threshold_sec || 300;
+      renderThreshold(sec);
+
       // Outage-dependent toggles
       const hasGroup = !!m.outage_group;
       document.getElementById('toggle-notify-outage').checked = m.notify_outage;
@@ -652,6 +666,30 @@
           showToast('Помилка видалення');
         }
       } catch (e) { showToast('Помилка видалення'); }
+    }
+
+    function renderThreshold(sec) {
+      const active = 'bg-stone-900 text-white border-stone-900';
+      const inactive = 'bg-white text-stone-700 border-stone-300 hover:bg-stone-50';
+      document.getElementById('btn-threshold-150').className = 'flex-1 text-sm font-medium px-4 py-2 rounded-lg border transition-colors ' + (sec === 150 ? active : inactive);
+      document.getElementById('btn-threshold-300').className = 'flex-1 text-sm font-medium px-4 py-2 rounded-lg border transition-colors ' + (sec === 300 ? active : inactive);
+    }
+
+    async function saveThreshold(sec) {
+      try {
+        const res = await fetch(API, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offline_threshold_sec: sec })
+        });
+        if (res.ok) {
+          showToast('Збережено');
+          renderThreshold(sec);
+          if (monitor) monitor.offline_threshold_sec = sec;
+        } else {
+          showToast('Помилка збереження');
+        }
+      } catch (e) { showToast('Помилка збереження'); }
     }
 
     async function reload() {

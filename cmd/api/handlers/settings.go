@@ -99,11 +99,12 @@ func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 		"monitor_type":    m.MonitorType,
 		"ping_target":     m.PingTarget,
 		"status_duration": database.FormatDuration(dur),
-		"dtek_enabled":    m.DtekEnabled,
-		"dtek_region":     m.DtekRegion,
-		"dtek_city":       m.DtekCity,
-		"dtek_street":     m.DtekStreet,
-		"dtek_house":      m.DtekHouse,
+		"dtek_enabled":          m.DtekEnabled,
+		"dtek_region":           m.DtekRegion,
+		"dtek_city":             m.DtekCity,
+		"dtek_street":           m.DtekStreet,
+		"dtek_house":            m.DtekHouse,
+		"offline_threshold_sec": m.OfflineThresholdSec,
 	})
 }
 
@@ -129,11 +130,12 @@ type settingsUpdateRequest struct {
 	NotifyOutage       *bool `json:"notify_outage"`
 	OutagePhotoEnabled *bool `json:"outage_photo_enabled"`
 	GraphEnabled       *bool `json:"graph_enabled"`
-	DtekEnabled  *bool   `json:"dtek_enabled"`
-	DtekRegion   *string `json:"dtek_region"`
-	DtekCity     *string `json:"dtek_city"`
-	DtekStreet   *string `json:"dtek_street"`
-	DtekHouse    *string `json:"dtek_house"`
+	DtekEnabled         *bool   `json:"dtek_enabled"`
+	DtekRegion          *string `json:"dtek_region"`
+	DtekCity            *string `json:"dtek_city"`
+	DtekStreet          *string `json:"dtek_street"`
+	DtekHouse           *string `json:"dtek_house"`
+	OfflineThresholdSec *int    `json:"offline_threshold_sec"` // only 150 or 300 accepted
 }
 
 // UpdateSettings updates editable fields of a monitor.
@@ -228,6 +230,19 @@ func (h *Handlers) UpdateSettings(c *fiber.Ctx) error {
 	if req.DtekEnabled != nil && *req.DtekEnabled != m.DtekEnabled {
 		if err := h.DB.SetMonitorDtekEnabled(ctx, m.ID, *req.DtekEnabled); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update dtek_enabled"})
+		}
+	}
+
+	// Update offline threshold (only 150 or 300 are valid).
+	if req.OfflineThresholdSec != nil {
+		sec := *req.OfflineThresholdSec
+		if sec != 150 && sec != 300 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "offline_threshold_sec must be 150 or 300"})
+		}
+		if sec != m.OfflineThresholdSec {
+			if err := h.DB.SetMonitorThreshold(ctx, m.ID, sec); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update offline threshold"})
+			}
 		}
 	}
 

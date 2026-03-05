@@ -261,6 +261,14 @@ const (
 	msgEditBtnHideGraph       = "📊 Не публікувати графік аптайму"
 	msgMapBtnHide             = "🗺 Прибрати з карти"
 	msgMapBtnShow             = "🗺 Додати на карту"
+	msgEditBtnThreshold       = "⏱ Поріг офлайн: %s"
+)
+
+const (
+	msgThresholdSet   = "✅ Поріг офлайн встановлено: %s"
+	msgThresholdError = "Помилка зміни порогу офлайн."
+	msgThreshold150   = "2.5 хв"
+	msgThreshold300   = "5 хв"
 )
 
 const (

@@ -94,6 +94,11 @@ func main() {
 	// Serve static frontend files
 	app.Static("/", "./web")
 
+	// 404 handler
+	app.Use(func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusNotFound).SendFile("./web/404.html")
+	})
+
 	// --- Graceful shutdown ---
 	go func() {
 		quit := make(chan os.Signal, 1)

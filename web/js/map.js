@@ -101,21 +101,30 @@ function createMarker(monitor) {
   });
   const marker = L.marker([monitor.lat, monitor.lng], { icon, isOnline: monitor.is_online });
 
-  const statusText = monitor.is_online ? 'Світло є' : 'Світла немає';
-  const statusColor = monitor.is_online ? COLORS.onlineText : COLORS.offline;
-  const channel = monitor.channel_name
-    ? `<div style="margin-top:6px;font-size:0.8em;"><a href="https://t.me/${escapeHtml(monitor.channel_name)}" target="_blank" style="color:#0ea5e9;text-decoration:none;">@${escapeHtml(monitor.channel_name)}</a></div>`
-    : '';
+  // Lazy popup — compute duration fresh on each click.
+  marker.on('click', function () {
+    if (marker.getPopup()) marker.unbindPopup();
 
-  marker.bindPopup(`
-    <div style="font-family:Inter,system-ui,sans-serif;min-width:170px;line-height:1.5;">
-      <div style="font-weight:600;font-size:0.95em;">${escapeHtml(monitor.name)}</div>
-      <div style="font-size:0.85em;color:#78716c;margin-bottom:8px;">${escapeHtml(monitor.address)}</div>
-      <div style="font-weight:500;color:${statusColor};">${statusText}</div>
-      <div style="font-size:0.83em;color:#78716c;">${monitor.status_duration}</div>
-      ${channel}
-    </div>
-  `);
+    const statusText = monitor.is_online ? 'Світло є' : 'Світла немає';
+    const statusColor = monitor.is_online ? COLORS.onlineText : COLORS.offline;
+    const duration = monitor.status_since ? formatDuration(new Date(monitor.status_since)) : '';
+    const durationText = duration
+      ? `<div style="font-size:0.83em;color:#78716c;">${duration}</div>`
+      : '';
+    const channel = monitor.channel_name
+      ? `<div style="margin-top:6px;font-size:0.8em;"><a href="https://t.me/${escapeHtml(monitor.channel_name)}" target="_blank" style="color:#0ea5e9;text-decoration:none;">@${escapeHtml(monitor.channel_name)}</a></div>`
+      : '';
+
+    marker.bindPopup(`
+      <div style="font-family:Inter,system-ui,sans-serif;min-width:170px;line-height:1.5;">
+        <div style="font-weight:600;font-size:0.95em;">${escapeHtml(monitor.name)}</div>
+        <div style="font-size:0.85em;color:#78716c;margin-bottom:8px;">${escapeHtml(monitor.address)}</div>
+        <div style="font-weight:500;color:${statusColor};">${statusText}</div>
+        ${durationText}
+        ${channel}
+      </div>
+    `).openPopup();
+  });
 
   return marker;
 }

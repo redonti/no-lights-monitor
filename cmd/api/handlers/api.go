@@ -111,19 +111,17 @@ func (h *Handlers) GetMonitors(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load monitors"})
 	}
 
-	now := time.Now()
 	result := make([]fiber.Map, 0, len(monitors))
 	for _, m := range monitors {
-		dur := now.Sub(m.LastStatusChangeAt)
 		result = append(result, fiber.Map{
-			"id":              m.ID,
-			"name":            m.Name,
-			"address":         m.Address,
-			"lat":             m.Latitude,
-			"lng":             m.Longitude,
-			"is_online":       m.IsOnline,
-			"status_duration": database.FormatDuration(dur),
-			"channel_name":    m.ChannelName,
+			"id":           m.ID,
+			"name":         m.Name,
+			"address":      m.Address,
+			"lat":          m.Latitude,
+			"lng":          m.Longitude,
+			"is_online":    m.IsOnline,
+			"status_since": m.LastStatusChangeAt.UTC().Format(time.RFC3339),
+			"channel_name": m.ChannelName,
 		})
 	}
 
@@ -134,7 +132,7 @@ func (h *Handlers) GetMonitors(c *fiber.Ctx) error {
 
 	// Store in cache.
 	h.monitorCache = data
-	h.monitorCacheAt = now
+	h.monitorCacheAt = time.Now()
 
 	c.Set("Content-Type", "application/json")
 	c.Set("Cache-Control", "public, max-age="+strconv.Itoa(MonitorCacheMaxAgeSec))

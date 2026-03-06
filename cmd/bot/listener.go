@@ -287,7 +287,8 @@ func (l *listener) deletePhoto(msg mq.OutagePhotoMsg) {
 func (l *listener) editPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 	chat := &tele.Chat{ID: msg.ChannelID}
 	editPhoto := &tele.Photo{
-		File: tele.FromReader(namedReader(msg.ImageData, msg.Filename)),
+		File:    tele.FromReader(namedReader(msg.ImageData, msg.Filename)),
+		Caption: msg.Caption,
 	}
 	editTeleMsg := &tele.Message{ID: msg.OldMsgID, Chat: chat}
 
@@ -321,7 +322,8 @@ func (l *listener) sendPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 	log.Printf("[listener] outage_photo monitor %d: sendPhoto quiet=%v", msg.MonitorID, quiet)
 	sendOpts := &tele.SendOptions{DisableNotification: quiet}
 	photo := &tele.Photo{
-		File: tele.FromReader(namedReader(msg.ImageData, msg.Filename)),
+		File:    tele.FromReader(namedReader(msg.ImageData, msg.Filename)),
+		Caption: msg.Caption,
 	}
 
 	sent, err := l.bot.Send(chat, photo, sendOpts)

@@ -146,6 +146,14 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 
 	filename := outage.GroupToFilename(m.OutageGroup)
 
+	// Build caption from today's outage schedule.
+	caption := ""
+	if fact, factErr := u.outage.GetGroupFact(m.OutageRegion, m.OutageGroup); factErr == nil {
+		caption = outage.BuildPhotoCaption(m.OutageGroup, fact, time.Now())
+	} else {
+		log.Printf("[outage-photo] monitor %d: failed to get fact for caption: %v", m.ID, factErr)
+	}
+
 	// Determine action: edit existing or send new.
 	action := mq.OutagePhotoSend
 	if m.OutagePhotoMessageID != 0 {
@@ -161,6 +169,7 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 		ImageData:   data,
 		Filename:    filename,
 		ETag:        etag,
+		Caption:     caption,
 	}
 	if err := u.pub.Publish(ctx, mq.RoutingOutagePhoto, msg); err != nil {
 		return fmt.Errorf("publish outage photo: %w", err)

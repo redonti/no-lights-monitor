@@ -79,6 +79,7 @@ type OutagePhotoMsg struct {
 	ImageData   []byte            `json:"image_data,omitempty"`
 	Filename    string            `json:"filename,omitempty"`
 	ETag        string            `json:"etag,omitempty"`
+	Caption     string            `json:"caption,omitempty"`
 }
 
 // GraphRequestMsg is published by the bot to request immediate graph generation.

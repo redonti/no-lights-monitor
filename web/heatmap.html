@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта відключень - No-Lights Monitor</title>
+  <link rel="icon" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>
+    body { margin: 0; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
+    #map { width: 100vw; height: 100vh; }
+    .leaflet-top { top: 52px; }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div class="fixed top-0 left-0 right-0 z-[1000] bg-white/90 backdrop-blur-lg border-b border-stone-200 px-5 py-3 flex items-center justify-between">
+    <a href="/" class="text-base font-semibold text-stone-900 no-underline">No-Lights Monitor</a>
+    <span class="text-stone-500 text-sm font-medium">Карта відключень <span class="text-xs bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 ml-1">бета</span></span>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Legend / controls -->
+  <div class="fixed bottom-6 left-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-3.5 text-sm text-stone-900 min-w-[220px]">
+    <div class="flex items-center justify-between gap-3 mb-2">
+      <h4 class="font-semibold text-sm">Легенда</h4>
+      <button id="legend-toggle" onclick="toggleLegend()" class="text-stone-400 hover:text-stone-700 transition-colors leading-none text-base select-none" title="Згорнути">▼</button>
+    </div>
+
+    <div id="legend-content">
+      <!-- Choropleth color scale -->
+      <div class="space-y-1.5 text-stone-600 mb-3">
+        <div class="flex items-center gap-2">
+          <div style="width:90px;height:10px;border-radius:4px;background:linear-gradient(to right,#4ade80,#fbbf24,#dc2626);flex-shrink:0"></div>
+        </div>
+        <div class="flex justify-between text-xs text-stone-400" style="width:90px">
+          <span>0%</span><span>50%</span><span>100%</span>
+        </div>
+        <div class="text-xs text-stone-500">% без світла в гексагоні (~30 км)</div>
+        <div class="text-xs text-stone-400">Прозорість = кількість моніторів</div>
+      </div>
+
+      <hr class="border-stone-200 mb-2" />
+
+      <!-- Marker color scale (shown at zoom ≥ 12) -->
+      <div class="space-y-1 text-stone-600 mb-3">
+        <div class="text-xs font-medium text-stone-500 mb-1">Маркери (масштаб ≥ 12)</div>
+        <div class="flex items-center gap-1.5 text-xs text-stone-500">
+          <div style="width:12px;height:12px;border-radius:50%;background:#fb923c;flex-shrink:0"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#f97316;flex-shrink:0"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#dc2626;flex-shrink:0"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#7f1d1d;flex-shrink:0"></div>
+          Без світла
+        </div>
+        <div class="flex items-center gap-1.5 text-xs text-stone-500">
+          <div style="width:12px;height:12px;border-radius:50%;background:#86efac;flex-shrink:0"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#4ade80;flex-shrink:0"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#16a34a;flex-shrink:0"></div>
+          <div style="width:12px;height:12px;border-radius:50%;background:#14532d;flex-shrink:0"></div>
+          Зі світлом
+        </div>
+        <div class="flex gap-1.5 text-xs text-stone-400 mt-0.5" style="padding-left:1px">
+          <span style="width:12px;text-align:center">0</span>
+          <span style="width:12px;text-align:center">4</span>
+          <span style="width:12px;text-align:center">8</span>
+          <span style="width:12px;text-align:center">12+</span>
+          <span>год</span>
+        </div>
+      </div>
+
+      <hr class="border-stone-200 mb-2" />
+
+      <!-- Toggles -->
+      <div class="space-y-2 text-stone-600">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="toggle-choro" checked class="accent-stone-700 w-3.5 h-3.5" />
+          Гексагони
+        </label>
+        <div class="pl-5 flex items-center gap-2">
+          <input type="range" id="hex-size" min="0" max="100" step="1" value="79" class="w-24 accent-stone-600" />
+          <span id="hex-size-label" class="text-xs text-stone-400 w-14">~30 км</span>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="toggle-markers" checked class="accent-stone-700 w-3.5 h-3.5" />
+          Маркери
+        </label>
+      </div>
+
+      <hr class="border-stone-200 my-2" />
+      <div id="last-updated" class="text-xs text-stone-400"></div>
+      <a href="/map.html" class="text-xs text-sky-500 hover:text-sky-600 no-underline">← Звичайна карта</a>
+    </div>
+  </div>
+
+  <!-- Stats badge -->
+  <div id="stats-badge" class="fixed bottom-6 right-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-600 hidden md:block" style="display:none">
+    Завантаження...
+  </div>
+
+  <script>
+    function toggleLegend() {
+      const content = document.getElementById('legend-content');
+      const btn     = document.getElementById('legend-toggle');
+      const hidden  = content.style.display === 'none';
+      content.style.display = hidden ? '' : 'none';
+      btn.textContent = hidden ? '▼' : '▲';
+      btn.title = hidden ? 'Згорнути' : 'Розгорнути';
+      localStorage.setItem('heatLegendCollapsed', hidden ? 'false' : 'true');
+    }
+    if (localStorage.getItem('heatLegendCollapsed') === 'true') {
+      document.getElementById('legend-content').style.display = 'none';
+      document.getElementById('legend-toggle').textContent = '▲';
+      document.getElementById('legend-toggle').title = 'Розгорнути';
+    }
+  </script>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/js/heatmap.js"></script>
+  <script data-goatcounter="https://lightmonitor.goatcounter.com/count"
+          async src="/js/count.js"></script>
+</body>
+</html>

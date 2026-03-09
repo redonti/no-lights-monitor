@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>No-Lights Monitor</title>
+  <link rel="icon" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+</head>
+<body class="bg-stone-100 text-stone-900 leading-relaxed">
+
+  <header class="bg-white border-b border-stone-200 py-3.5">
+    <div class="max-w-3xl mx-auto px-5 flex items-center justify-between">
+      <a href="/" class="text-base font-semibold text-stone-900 no-underline">No-Lights Monitor</a>
+      <nav class="flex items-center gap-5">
+        <a href="#how-it-works" class="text-stone-500 text-sm hover:text-stone-900 no-underline">Як це працює</a>
+        <a href="/map.html" class="bg-white border border-stone-200 hover:border-blue-600 hover:text-blue-600 text-stone-600 px-4 py-1.5 rounded-lg text-sm font-medium no-underline transition-colors">Карта</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="pt-8 pb-8 max-sm:pt-6 max-sm:pb-6">
+    <div class="max-w-3xl mx-auto px-5">
+      <h1 class="text-4xl max-sm:text-2xl font-bold tracking-tight leading-tight mb-3.5">Простий монітор електроенергії.</h1>
+      <p class="text-base text-stone-600 mb-8 max-w-lg">
+        Моніторинг електроенергії який надсилає сповіщення в Telegram,
+        коли світло зникає — і коли повертається.
+      </p>
+      <div class="flex gap-3 flex-wrap">
+        <a href="https://t.me/{{.BotUsername}}" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium no-underline transition-colors">Підключити сповіщення</a>
+        <a href="/map.html" class="bg-white border border-stone-200 hover:border-blue-600 hover:text-blue-600 text-stone-600 px-6 py-2.5 rounded-lg font-medium no-underline transition-colors">Переглянути карту</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="how-it-works" class="pt-8 pb-8">
+    <div class="max-w-3xl mx-auto px-5">
+      <h2 class="text-xl font-semibold mb-6">Як це працює</h2>
+      <div class="flex flex-col gap-3">
+        <div class="flex gap-4 items-start bg-white border border-stone-200 rounded-xl p-5">
+          <div class="shrink-0 w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center font-semibold text-sm text-stone-500">1</div>
+          <div>
+            <h3 class="text-sm font-semibold text-stone-900 mb-0.5">Реєстрація через Telegram</h3>
+            <p class="text-sm text-stone-500">Запустіть бота, вкажіть місцезнаходження та створіть канал для сповіщень.</p>
+          </div>
+        </div>
+        <div class="flex gap-4 items-start bg-white border border-stone-200 rounded-xl p-5">
+          <div class="shrink-0 w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center font-semibold text-sm text-stone-500">2</div>
+          <div>
+            <h3 class="text-sm font-semibold text-stone-900 mb-0.5">Підключіть пристрій або роутер</h3>
+            <p class="text-sm text-stone-500">Старий телефон, роутер або ESP — підійде будь-що. Бот надасть інструкцію, налаштування займає до 3 хвилин.</p>
+          </div>
+        </div>
+        <div class="flex gap-4 items-start bg-white border border-stone-200 rounded-xl p-5">
+          <div class="shrink-0 w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center font-semibold text-sm text-stone-500">3</div>
+          <div>
+            <h3 class="text-sm font-semibold text-stone-900 mb-0.5">Отримуйте сповіщення</h3>
+            <p class="text-sm text-stone-500">Коли пінги зупиняються — світла немає. Ваш Telegram-канал одразу отримує сповіщення. Так само, коли світло повертається.</p>
+          </div>
+        </div>
+      </div>
+      <div class="rounded-xl overflow-hidden border border-stone-200" style="margin-top: 2rem;">
+        <video src="/media/MonitoringModes.mp4" autoplay loop muted playsinline class="w-full"></video>
+      </div>
+    </div>
+  </section>
+
+  <section class="pt-8 pb-8">
+    <div class="max-w-3xl mx-auto px-5">
+      <h2 class="text-xl font-semibold mb-2">Карта в реальному часі</h2>
+      <p class="text-stone-600 text-sm mb-5">Кожен маркер — це точка моніторингу. <span class="text-green-600 font-medium">Зелений</span> — світло є. <span class="text-red-600 font-medium">Червоний</span> — світла немає.</p>
+      <a href="/map.html" class="bg-white border border-stone-200 hover:border-blue-600 hover:text-blue-600 text-stone-600 px-6 py-2.5 rounded-lg font-medium no-underline transition-colors inline-block mb-4">Відкрити карту</a>
+    </div>
+  </section>
+
+  <footer class="border-t border-stone-200 py-8">
+    <div class="max-w-3xl mx-auto px-5 flex justify-between items-center text-stone-500 text-xs max-sm:flex-col max-sm:gap-1">
+      <span>No-Lights Monitor</span>
+      <a href="https://t.me/{{.ChatUsername}}" class="text-blue-600 hover:text-blue-700 underline transition-colors">Чат для питань та ідей</a>
+      <span>Моніторинг електроенергії</span>
+    </div>
+  </footer>
+  <script data-goatcounter="https://lightmonitor.goatcounter.com/count"
+          async src="/js/count.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/redonti/no-lights-monitor
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'cmd/api/**'
+              - 'internal/**'
+              - 'web/**'
+              - 'Dockerfile.api'
+              - 'go.mod'
+              - 'go.sum'
+            worker:
+              - 'cmd/worker/**'
+              - 'internal/**'
+              - 'Dockerfile.worker'
+              - 'go.mod'
+              - 'go.sum'
+            bot:
+              - 'cmd/bot/**'
+              - 'internal/**'
+              - 'Dockerfile.bot'
+              - 'go.mod'
+              - 'go.sum'
+            outage:
+              - 'cmd/outage/**'
+              - 'internal/**'
+              - 'Dockerfile.outage'
+              - 'go.mod'
+              - 'go.sum'
+            graph-service:
+              - 'graph-service/**'
+            dtek:
+              - 'dtek-service/**'
+
+  build:
+    needs: changes
+    if: ${{ needs.changes.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set build context
+        id: ctx
+        run: |
+          case "${{ matrix.service }}" in
+            graph-service)
+              echo "dockerfile=graph-service/Dockerfile" >> $GITHUB_OUTPUT
+              echo "context=./graph-service" >> $GITHUB_OUTPUT
+              ;;
+            dtek)
+              echo "dockerfile=dtek-service/Dockerfile" >> $GITHUB_OUTPUT
+              echo "context=./dtek-service" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "dockerfile=Dockerfile.${{ matrix.service }}" >> $GITHUB_OUTPUT
+              echo "context=." >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            cd /opt/lights-monitor/no-lights-monitor
+            git pull origin main
+            docker compose pull
+            docker compose up -d
+            docker compose restart nginx
+            docker image prune -f
+            echo "Deploy completed at $(date)"

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта - No-Lights Monitor</title>
+  <link rel="icon" href="/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #map { width: 100vw; height: 100vh; }
+    .leaflet-top { top: 52px; }
+  </style>
+</head>
+<body class="font-sans">
+  <div class="fixed top-0 left-0 right-0 z-[1000] bg-white/90 backdrop-blur-lg border-b border-stone-200 px-5 py-3 flex items-center justify-between">
+    <a href="/" class="text-base font-semibold text-stone-900 no-underline">No-Lights Monitor</a>
+    <span class="text-stone-500 text-sm font-medium">Карта</span>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="fixed bottom-6 left-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-3.5 text-sm text-stone-900">
+    <div class="flex items-center justify-between gap-3 cursor-pointer select-none" onclick="toggleLegend()">
+      <h4 class="font-semibold text-sm">Легенда</h4>
+      <span id="legend-toggle" class="text-stone-400 leading-none text-base">▼</span>
+    </div>
+    <div id="legend-content">
+      <div class="flex items-center gap-2 my-1 mt-2 text-stone-600">
+        <div class="w-2.5 h-2.5 rounded-full bg-green-600"></div> Світло є
+      </div>
+      <div class="flex items-center gap-2 my-1 text-stone-600">
+        <div class="w-2.5 h-2.5 rounded-full bg-red-600"></div> Світла немає
+      </div>
+      <hr class="my-2 border-stone-200" />
+      <div id="last-updated" class="text-xs text-stone-400 mb-2"></div>
+      <h4 class="font-semibold text-sm mb-2">Джерела</h4>
+      <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
+        <input type="checkbox" id="toggle-svitlobot" checked class="accent-sky-500 w-3.5 h-3.5" />
+        <div class="w-2.5 h-2.5 bg-stone-400 rotate-45 shrink-0"></div> <a href="https://svitlobot.in.ua" target="_blank" class="text-sky-500 hover:text-sky-600 no-underline">Svitlobot</a>
+      </label>
+      <hr class="my-2 border-stone-200" />
+      <h4 class="font-semibold text-sm mb-2">Відображення</h4>
+      <label class="flex items-center gap-2 my-1 text-stone-600 cursor-pointer select-none">
+        <input type="checkbox" id="toggle-grouping" checked class="accent-stone-700 w-3.5 h-3.5" />
+        Групування маркерів
+      </label>
+      <hr class="my-2 border-stone-200" />
+      <a href="/heatmap.html" class="text-xs text-sky-500 hover:text-sky-600 no-underline">Карта відключень →</a>
+    </div>
+  </div>
+
+  <script>
+    function toggleLegend() {
+      const content = document.getElementById('legend-content');
+      const btn = document.getElementById('legend-toggle');
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? '' : 'none';
+      btn.textContent = isHidden ? '▼' : '▲';
+      btn.title = isHidden ? 'Згорнути' : 'Розгорнути';
+      localStorage.setItem('legendCollapsed', isHidden ? 'false' : 'true');
+    }
+    if (localStorage.getItem('legendCollapsed') === 'true') {
+      document.getElementById('legend-content').style.display = 'none';
+      document.getElementById('legend-toggle').textContent = '▲';
+      document.getElementById('legend-toggle').title = 'Розгорнути';
+    }
+  </script>
+
+  <div id="stats-badge" class="fixed bottom-6 right-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-600 hidden md:block">
+    Завантаження...
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="/js/map.js"></script>
+  <script data-goatcounter="https://lightmonitor.goatcounter.com/count"
+          async src="/js/count.js"></script>
+</body>
+</html>

@@ -1,0 +1,569 @@
+package database
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"no-lights-monitor/internal/models"
+)
+
+// Column lists — update these (+ the struct db tags) when adding new fields.
+const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
+	channel_id, channel_name, monitor_type, ping_target,
+	is_online, is_active, is_public, notify_address,
+	outage_region, outage_group, notify_outage, outage_photo_enabled,
+	graph_enabled, last_heartbeat_at, last_status_change_at, graph_message_id, graph_week_start,
+	outage_photo_message_id, outage_photo_updated_at, outage_photo_etag, settings_token,
+	dtek_enabled, dtek_region, dtek_city, dtek_street, dtek_house, dtek_outage_notified_at,
+	dtek_outage_recheck_at, dtek_outage_message_id,
+	offline_threshold_sec,
+	created_at, deleted_at`
+
+// monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
+const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.latitude, m.longitude,
+	m.channel_id, m.channel_name, m.monitor_type, m.ping_target,
+	m.is_online, m.is_active, m.is_public, m.notify_address,
+	m.outage_region, m.outage_group, m.notify_outage, m.outage_photo_enabled,
+	m.graph_enabled, m.last_heartbeat_at, m.last_status_change_at, m.graph_message_id, m.graph_week_start,
+	m.outage_photo_message_id, m.outage_photo_updated_at, m.outage_photo_etag, m.settings_token,
+	m.dtek_enabled, m.dtek_region, m.dtek_city, m.dtek_street, m.dtek_house, m.dtek_outage_notified_at,
+	m.dtek_outage_recheck_at, m.dtek_outage_message_id,
+	m.offline_threshold_sec,
+	m.created_at, m.deleted_at`
+
+const userColumns = `id, telegram_id, username, first_name, created_at`
+
+const statusEventColumns = `id, monitor_id, is_online, timestamp`
+
+type DB struct {
+	Pool *pgxpool.Pool
+}
+
+func New(ctx context.Context, databaseURL string) (*DB, error) {
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+	return &DB{Pool: pool}, nil
+}
+
+func (db *DB) Close() {
+	db.Pool.Close()
+}
+
+// Migrate creates the schema if it doesn't exist.
+func (db *DB) Migrate(ctx context.Context) error {
+	sql := `
+	CREATE TABLE IF NOT EXISTS users (
+		id            BIGSERIAL PRIMARY KEY,
+		telegram_id   BIGINT UNIQUE NOT NULL,
+		username      TEXT NOT NULL DEFAULT '',
+		first_name    TEXT NOT NULL DEFAULT '',
+		created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS monitors (
+		id                   BIGSERIAL PRIMARY KEY,
+		user_id              BIGINT NOT NULL REFERENCES users(id),
+		token                UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+		name                 TEXT NOT NULL,
+		address              TEXT NOT NULL,
+		latitude             DOUBLE PRECISION NOT NULL,
+		longitude            DOUBLE PRECISION NOT NULL,
+		channel_id           BIGINT,
+		channel_name         TEXT NOT NULL DEFAULT '',
+		is_online            BOOLEAN NOT NULL DEFAULT FALSE,
+		last_heartbeat_at    TIMESTAMPTZ,
+		last_status_change_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		graph_message_id     INT NOT NULL DEFAULT 0,
+		graph_week_start     TIMESTAMPTZ,
+		created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS graph_message_id INT NOT NULL DEFAULT 0;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS graph_week_start TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS monitor_type TEXT NOT NULL DEFAULT 'heartbeat';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS ping_target TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT TRUE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_address BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_region TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_group TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_outage BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS graph_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_message_id INT NOT NULL DEFAULT 0;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_updated_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS outage_photo_etag TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_token UUID UNIQUE DEFAULT gen_random_uuid();
+	UPDATE monitors SET settings_token = gen_random_uuid() WHERE settings_token IS NULL;
+	ALTER TABLE monitors ALTER COLUMN settings_token SET NOT NULL;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_region TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_city TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_street TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_house TEXT NOT NULL DEFAULT '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_notified_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_recheck_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_message_id BIGINT NOT NULL DEFAULT 0;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS offline_threshold_sec INT NOT NULL DEFAULT 300;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
+	CREATE INDEX IF NOT EXISTS idx_monitors_settings_token ON monitors(settings_token);
+	CREATE INDEX IF NOT EXISTS idx_monitors_user_id ON monitors(user_id);
+
+	CREATE TABLE IF NOT EXISTS status_events (
+		id          BIGSERIAL PRIMARY KEY,
+		monitor_id  BIGINT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+		is_online   BOOLEAN NOT NULL,
+		timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_status_events_monitor_time
+		ON status_events (monitor_id, timestamp DESC);
+	`
+	_, err := db.Pool.Exec(ctx, sql)
+	return err
+}
+
+// ── User queries ─────────────────────────────────────────────────────
+
+// UpsertUser creates or updates a user and returns their record.
+func (db *DB) UpsertUser(ctx context.Context, telegramID int64, username, firstName string) (*models.User, error) {
+	rows, err := db.Pool.Query(ctx, `
+		INSERT INTO users (telegram_id, username, first_name)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (telegram_id) DO UPDATE SET username = $2, first_name = $3
+		RETURNING `+userColumns+`
+	`, telegramID, username, firstName)
+	if err != nil {
+		return nil, err
+	}
+	user, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.User])
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// GetAllUsers returns every user in the database.
+func (db *DB) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+userColumns+` FROM users ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.User])
+}
+
+// ── Monitor queries ──────────────────────────────────────────────────
+
+// CreateMonitor inserts a new monitor and returns it (with generated token).
+func (db *DB) CreateMonitor(ctx context.Context, userID int64, name, address string, lat, lng float64, channelID int64, channelName, monitorType, pingTarget string) (*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		INSERT INTO monitors (user_id, name, address, latitude, longitude, channel_id, channel_name, monitor_type, ping_target)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING `+monitorColumns+`
+	`, userID, name, address, lat, lng, channelID, channelName, monitorType, pingTarget)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetMonitorByToken returns a monitor by its unique token.
+func (db *DB) GetMonitorByToken(ctx context.Context, token string) (*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors WHERE token = $1 AND deleted_at IS NULL
+	`, token)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetMonitorBySettingsToken returns a monitor by its unique settings token.
+func (db *DB) GetMonitorBySettingsToken(ctx context.Context, settingsToken string) (*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors WHERE settings_token = $1 AND deleted_at IS NULL
+	`, settingsToken)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetMonitorsByTelegramID returns all monitors for the user with the given Telegram ID.
+func (db *DB) GetMonitorsByTelegramID(ctx context.Context, telegramID int64) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumnsAliased+` FROM monitors m
+		JOIN users u ON u.id = m.user_id
+		WHERE u.telegram_id = $1 AND m.deleted_at IS NULL
+		ORDER BY m.created_at DESC
+	`, telegramID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetPublicMonitors returns monitors that are visible on the public map.
+func (db *DB) GetPublicMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE is_public = TRUE AND is_active = TRUE AND deleted_at IS NULL ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetAllMonitors returns every monitor in the database.
+func (db *DB) GetAllMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors WHERE deleted_at IS NULL ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetMonitorsWithChannels returns all monitors that have a Telegram channel linked.
+func (db *DB) GetMonitorsWithChannels(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE channel_id IS NOT NULL AND channel_id != 0 AND is_active = TRUE AND deleted_at IS NULL
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// ── Monitor updates ──────────────────────────────────────────────────
+
+// UpdateMonitorStatus sets online/offline, updates the status change timestamp,
+// and logs a status event for historical graphs.
+func (db *DB) UpdateMonitorStatus(ctx context.Context, id int64, isOnline bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors
+		SET is_online = $2, last_status_change_at = NOW()
+		WHERE id = $1
+	`, id, isOnline)
+	if err != nil {
+		return err
+	}
+
+	// Log the status change event.
+	_, err = db.Pool.Exec(ctx, `
+		INSERT INTO status_events (monitor_id, is_online) VALUES ($1, $2)
+	`, id, isOnline)
+	return err
+}
+
+// UpdateMonitorHeartbeat sets the last heartbeat timestamp.
+func (db *DB) UpdateMonitorHeartbeat(ctx context.Context, id int64, at time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET last_heartbeat_at = $2 WHERE id = $1
+	`, id, at)
+	return err
+}
+
+// SetMonitorActive enables or disables monitoring for a monitor.
+func (db *DB) SetMonitorActive(ctx context.Context, id int64, isActive bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET is_active = $2 WHERE id = $1
+	`, id, isActive)
+	return err
+}
+
+// SetMonitorPublic shows or hides a monitor on the public map.
+func (db *DB) SetMonitorPublic(ctx context.Context, id int64, isPublic bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET is_public = $2 WHERE id = $1
+	`, id, isPublic)
+	return err
+}
+
+// SetMonitorOutageGroup saves the outage region and group for a monitor.
+func (db *DB) SetMonitorOutageGroup(ctx context.Context, id int64, region, group string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET outage_region = $2, outage_group = $3 WHERE id = $1
+	`, id, region, group)
+	return err
+}
+
+// SetMonitorNotifyOutage toggles whether the outage schedule is shown in notifications.
+func (db *DB) SetMonitorNotifyOutage(ctx context.Context, id int64, notifyOutage bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET notify_outage = $2 WHERE id = $1
+	`, id, notifyOutage)
+	return err
+}
+
+// SetMonitorOutagePhotoEnabled toggles whether the outage schedule photo is posted to the channel.
+func (db *DB) SetMonitorOutagePhotoEnabled(ctx context.Context, id int64, enabled bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET outage_photo_enabled = $2 WHERE id = $1
+	`, id, enabled)
+	return err
+}
+
+// SetMonitorGraphEnabled toggles whether the uptime graph is posted to the channel.
+func (db *DB) SetMonitorGraphEnabled(ctx context.Context, id int64, enabled bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET graph_enabled = $2 WHERE id = $1
+	`, id, enabled)
+	return err
+}
+
+// SetMonitorNotifyAddress toggles whether the address is shown in notifications.
+func (db *DB) SetMonitorNotifyAddress(ctx context.Context, id int64, notifyAddress bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET notify_address = $2 WHERE id = $1
+	`, id, notifyAddress)
+	return err
+}
+
+// SetMonitorThreshold sets the per-monitor offline threshold in seconds.
+func (db *DB) SetMonitorThreshold(ctx context.Context, id int64, thresholdSec int) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET offline_threshold_sec = $2 WHERE id = $1
+	`, id, thresholdSec)
+	return err
+}
+
+// UpdateMonitorName updates the display name of a monitor.
+func (db *DB) UpdateMonitorName(ctx context.Context, id int64, name string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET name = $2 WHERE id = $1
+	`, id, name)
+	return err
+}
+
+// UpdateMonitorChannelName updates the stored Telegram channel username for a monitor.
+func (db *DB) UpdateMonitorChannelName(ctx context.Context, id int64, channelName string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET channel_name = $2 WHERE id = $1
+	`, id, channelName)
+	return err
+}
+
+// UpdateMonitorAddress updates the address and coordinates of a monitor.
+func (db *DB) UpdateMonitorAddress(ctx context.Context, id int64, address string, lat, lng float64) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET address = $2, latitude = $3, longitude = $4 WHERE id = $1
+	`, id, address, lat, lng)
+	return err
+}
+
+// UpdateGraphMessage stores the Telegram message ID and week start for the current graph.
+func (db *DB) UpdateGraphMessage(ctx context.Context, monitorID int64, messageID int, weekStart time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET graph_message_id = $2, graph_week_start = $3 WHERE id = $1
+	`, monitorID, messageID, weekStart)
+	return err
+}
+
+// UpdateOutagePhoto stores the Telegram message ID, ETag, and fetch time for the outage schedule photo.
+func (db *DB) UpdateOutagePhoto(ctx context.Context, monitorID int64, messageID int, etag string, updatedAt time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET outage_photo_message_id = $2, outage_photo_etag = $3, outage_photo_updated_at = $4 WHERE id = $1
+	`, monitorID, messageID, etag, updatedAt)
+	return err
+}
+
+// ClearOutagePhoto resets the outage photo fields (e.g. after deleting the message).
+func (db *DB) ClearOutagePhoto(ctx context.Context, monitorID int64) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET outage_photo_message_id = 0, outage_photo_etag = '', outage_photo_updated_at = NULL WHERE id = $1
+	`, monitorID)
+	return err
+}
+
+// GetAllDeletedMonitors returns every soft-deleted monitor ordered by deletion time.
+func (db *DB) GetAllDeletedMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// DeleteMonitor soft-deletes a monitor by setting deleted_at.
+func (db *DB) DeleteMonitor(ctx context.Context, id int64) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET deleted_at = NOW() WHERE id = $1
+	`, id)
+	return err
+}
+
+// ── Status event queries ─────────────────────────────────────────────
+
+// GetLastEventBefore returns the most recent status event strictly before the given time.
+// Returns nil, nil if no such event exists.
+func (db *DB) GetLastEventBefore(ctx context.Context, monitorID int64, before time.Time) (*models.StatusEvent, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+statusEventColumns+` FROM status_events
+		WHERE monitor_id = $1 AND timestamp < $2
+		ORDER BY timestamp DESC
+		LIMIT 1
+	`, monitorID, before)
+	if err != nil {
+		return nil, err
+	}
+	events, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.StatusEvent])
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, nil
+	}
+	return events[0], nil
+}
+
+// GetStatusHistory returns status events for a monitor within a time range.
+func (db *DB) GetStatusHistory(ctx context.Context, monitorID int64, from, to time.Time) ([]*models.StatusEvent, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+statusEventColumns+` FROM status_events
+		WHERE monitor_id = $1 AND timestamp >= $2 AND timestamp <= $3
+		ORDER BY timestamp ASC
+	`, monitorID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.StatusEvent])
+}
+
+// SetMonitorDtekConfig saves the DTEK unplanned outage config for a monitor.
+func (db *DB) SetMonitorDtekConfig(ctx context.Context, id int64, enabled bool, region, city, street, house string) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors
+		SET dtek_enabled = $2, dtek_region = $3, dtek_city = $4, dtek_street = $5, dtek_house = $6
+		WHERE id = $1
+	`, id, enabled, region, city, street, house)
+	return err
+}
+
+// SetMonitorDtekEnabled toggles the DTEK unplanned outage monitoring.
+func (db *DB) SetMonitorDtekEnabled(ctx context.Context, id int64, enabled bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_enabled = $2 WHERE id = $1
+	`, id, enabled)
+	return err
+}
+
+// SaveDtekOutageDetected records the initial DTEK outage detection: sets notified_at and
+// recheck_at (the parsed outage end time, or a fallback). Call this on first detection.
+func (db *DB) SaveDtekOutageDetected(ctx context.Context, id int64, notifiedAt time.Time, recheckAt time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_outage_notified_at = $2, dtek_outage_recheck_at = $3 WHERE id = $1
+	`, id, notifiedAt, recheckAt)
+	return err
+}
+
+// SetMonitorDtekOutageMessageID saves the Telegram message ID of the sent DTEK notification.
+// Called by the bot service after successfully sending the message.
+func (db *DB) SetMonitorDtekOutageMessageID(ctx context.Context, id int64, msgID int) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_outage_message_id = $2 WHERE id = $1
+	`, id, msgID)
+	return err
+}
+
+// UpdateDtekOutageRecheck advances the re-check time after a successful update check.
+// Pass the new recheckAt (parsed end time or 1h snooze) to prevent immediate re-polling.
+func (db *DB) UpdateDtekOutageRecheck(ctx context.Context, id int64, recheckAt time.Time) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET dtek_outage_recheck_at = $2 WHERE id = $1
+	`, id, recheckAt)
+	return err
+}
+
+// GetNeverActiveMonitors returns active monitors where last_status_change_at equals
+// created_at, meaning they have never received any heartbeat or status change since creation.
+func (db *DB) GetNeverActiveMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE is_active = TRUE
+		  AND deleted_at IS NULL
+		  AND last_status_change_at = created_at
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// GetDtekPendingMonitors returns active, offline monitors with DTEK enabled that
+// have not yet been notified for the current offline period.
+func (db *DB) GetDtekPendingMonitors(ctx context.Context) ([]*models.Monitor, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+monitorColumns+` FROM monitors
+		WHERE is_active = TRUE
+		  AND deleted_at IS NULL
+		  AND is_online = FALSE
+		  AND dtek_enabled = TRUE
+		  AND dtek_region != ''
+		  AND dtek_street != ''
+		  AND dtek_house != ''
+		  AND (
+		    -- Never notified for this offline period.
+		    (dtek_outage_notified_at IS NULL OR dtek_outage_notified_at < last_status_change_at)
+		    OR
+		    -- Already notified, but re-check time has passed — check for updates.
+		    (dtek_outage_notified_at >= last_status_change_at AND dtek_outage_recheck_at IS NOT NULL AND dtek_outage_recheck_at < NOW())
+		  )
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[models.Monitor])
+}
+
+// ── Other queries ────────────────────────────────────────────────────
+
+// GetOwnerTelegramIDByMonitorID returns the Telegram ID of the monitor's owner.
+func (db *DB) GetOwnerTelegramIDByMonitorID(ctx context.Context, monitorID int64) (int64, error) {
+	var telegramID int64
+	err := db.Pool.QueryRow(ctx, `
+		SELECT u.telegram_id FROM users u
+		JOIN monitors m ON m.user_id = u.id
+		WHERE m.id = $1
+	`, monitorID).Scan(&telegramID)
+	return telegramID, err
+}
+
+// FormatDuration returns a human-readable Ukrainian duration string.
+func FormatDuration(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%d д %d год %d хв", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%d год %d хв", hours, minutes)
+	}
+	return fmt.Sprintf("%d хв", minutes)
+}

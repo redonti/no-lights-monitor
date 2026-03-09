@@ -1,0 +1,219 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-nginx
+
+  graph-service:
+    image: ghcr.io/redonti/no-lights-monitor/graph-service:latest
+    build: ./graph-service
+    container_name: light-graph-service
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - TZ=Europe/Kyiv
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-graph
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nolights
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-postgres
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"  # Bind to localhost only — do NOT expose to internet
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme} --appendonly yes
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-redis
+
+  # API Service - Handles HTTP traffic (pings, monitor list, history)
+  api:
+    image: ghcr.io/redonti/no-lights-monitor/api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: nolights-api
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      TZ: Europe/Kyiv
+      PORT: 8080
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      ADMIN_LOGIN: ${ADMIN_LOGIN}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      OUTAGE_SERVICE_URL: http://outage:8090
+      DTEK_SERVICE_URL: http://dtek:3000
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
+      TELEGRAM_CHAT_USERNAME: ${TELEGRAM_CHAT_USERNAME}
+    depends_on:
+      - postgres
+      - redis
+      - outage
+      - dtek
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: nolights-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-nolights}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-changeme}
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-rabbitmq
+
+  # Worker Service - Heartbeat monitoring + background image generation
+  worker:
+    image: ghcr.io/redonti/no-lights-monitor/worker:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: nolights-worker
+    cap_add:
+      - NET_RAW
+    environment:
+      TZ: Europe/Kyiv
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-nolights}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
+      GRAPH_SERVICE_URL: http://graph-service:8000
+      OFFLINE_THRESHOLD: ${OFFLINE_THRESHOLD:-300}
+      PING_INTERVAL: ${PING_INTERVAL:-300}
+      DTEK_SERVICE_URL: http://dtek:3000
+      DTEK_POLL_INTERVAL: ${DTEK_POLL_INTERVAL:-900}
+      OUTAGE_SERVICE_URL: http://outage:8090
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - graph-service
+      - dtek
+      - outage
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-worker
+
+  # Bot Service - Telegram bot + message sending
+  bot:
+    image: ghcr.io/redonti/no-lights-monitor/bot:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: nolights-bot
+    cap_add:
+      - NET_RAW
+    environment:
+      TZ: Europe/Kyiv
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/nolights?sslmode=disable
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-nolights}:${RABBITMQ_PASS:-changeme}@rabbitmq:5672/
+      BOT_TOKEN: ${BOT_TOKEN}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      OUTAGE_SERVICE_URL: http://outage:8090
+      TELEGRAM_CHAT_USERNAME: ${TELEGRAM_CHAT_USERNAME}
+    depends_on:
+      - postgres
+      - rabbitmq
+      - outage
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-bot
+
+  # DTEK Service - Scrapes DTEK website for unplanned outage status by address
+  dtek:
+    image: ghcr.io/redonti/no-lights-monitor/dtek:latest
+    build:
+      context: ./dtek-service
+    container_name: nolights-dtek
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      TZ: Europe/Kyiv
+      PORT: 3000
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-dtek
+
+  # Outage Service - Fetches and serves power outage schedule data (internal only)
+  outage:
+    image: ghcr.io/redonti/no-lights-monitor/outage:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.outage
+    container_name: nolights-outage
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      TZ: Europe/Kyiv
+      OUTAGE_PORT: 8090
+      OUTAGE_FETCH_INTERVAL: ${OUTAGE_FETCH_INTERVAL:-900}
+    restart: unless-stopped
+    logging:
+      driver: journald
+      options:
+        tag: nolights-outage
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitmqdata:

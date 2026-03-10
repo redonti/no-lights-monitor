@@ -25,3 +25,4 @@ COPY --from=builder /app/outage .
 EXPOSE 8090
 
 CMD ["./outage"]
+

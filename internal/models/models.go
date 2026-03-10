@@ -48,6 +48,7 @@ type Monitor struct {
 	DtekOutageRecheckAt  *time.Time `json:"dtek_outage_recheck_at,omitempty" db:"dtek_outage_recheck_at"`
 	DtekOutageMessageID  int        `json:"dtek_outage_message_id" db:"dtek_outage_message_id"`
 	OfflineThresholdSec  int        `json:"offline_threshold_sec" db:"offline_threshold_sec"` // 150 (2.5 min) or 300 (5 min)
+	SettingsPassword     string     `json:"settings_password" db:"settings_password"`
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 	DeletedAt            *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }

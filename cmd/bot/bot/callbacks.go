@@ -180,7 +180,7 @@ func (b *Bot) onCallbackInfo(ctx context.Context, c tele.Context, m *models.Moni
 	}
 
 	bld.WriteString("\n")
-	bld.WriteString(fmt.Sprintf(msgInfoDetailSettings, b.baseURL, m.SettingsToken))
+	bld.WriteString(fmt.Sprintf(msgInfoDetailSettings, b.baseURL, m.SettingsToken, m.SettingsPassword))
 
 	return c.Edit(bld.String(), tele.ModeHTML, &tele.ReplyMarkup{})
 }
@@ -252,7 +252,7 @@ func (b *Bot) renderEditMenu(c tele.Context, m *models.Monitor) error {
 		}
 	}
 	keyboard := &tele.ReplyMarkup{InlineKeyboard: rows}
-	return c.Edit(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name), b.baseURL, m.SettingsToken), tele.ModeHTML, keyboard)
+	return c.Edit(fmt.Sprintf(msgEditChoose, html.EscapeString(m.Name), b.baseURL, m.SettingsToken, m.SettingsPassword), tele.ModeHTML, keyboard)
 }
 
 func (b *Bot) onCallbackEdit(c tele.Context, m *models.Monitor) error {

@@ -20,7 +20,7 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	outage_photo_message_id, outage_photo_updated_at, outage_photo_etag, settings_token,
 	dtek_enabled, dtek_region, dtek_city, dtek_street, dtek_house, dtek_outage_notified_at,
 	dtek_outage_recheck_at, dtek_outage_message_id,
-	offline_threshold_sec,
+	offline_threshold_sec, settings_password,
 	created_at, deleted_at`
 
 // monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
@@ -32,7 +32,7 @@ const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.la
 	m.outage_photo_message_id, m.outage_photo_updated_at, m.outage_photo_etag, m.settings_token,
 	m.dtek_enabled, m.dtek_region, m.dtek_city, m.dtek_street, m.dtek_house, m.dtek_outage_notified_at,
 	m.dtek_outage_recheck_at, m.dtek_outage_message_id,
-	m.offline_threshold_sec,
+	m.offline_threshold_sec, m.settings_password,
 	m.created_at, m.deleted_at`
 
 const userColumns = `id, telegram_id, username, first_name, created_at`
@@ -115,6 +115,8 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS dtek_outage_message_id BIGINT NOT NULL DEFAULT 0;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS offline_threshold_sec INT NOT NULL DEFAULT 300;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_password TEXT NOT NULL DEFAULT left(replace(gen_random_uuid()::text, '-', ''), 8);
+	UPDATE monitors SET settings_password = left(replace(gen_random_uuid()::text, '-', ''), 8) WHERE settings_password = '';
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_settings_token ON monitors(settings_token);

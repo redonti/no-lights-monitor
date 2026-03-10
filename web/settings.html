@@ -23,6 +23,18 @@
     </div>
   </header>
 
+  <!-- Password gate -->
+  <div id="password-gate" class="hidden flex items-center justify-center px-5" style="min-height:calc(100vh - 57px)">
+    <div class="bg-white border border-stone-200 rounded-xl p-6 w-full max-w-sm">
+      <h2 class="text-base font-semibold mb-1">Налаштування монітора</h2>
+      <p class="text-sm text-stone-400 mb-4">Введіть пароль із повідомлення бота</p>
+      <input id="password-input" type="password" autocomplete="off" placeholder="Введіть пароль"
+        class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400" />
+      <p id="password-error" class="hidden text-xs text-red-500 mt-2">Невірний пароль. Спробуйте ще раз.</p>
+      <button onclick="submitPassword()" class="mt-4 w-full bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors">Увійти</button>
+    </div>
+  </div>
+
   <!-- Loading -->
   <div id="loading" class="max-w-2xl mx-auto px-5 pt-16 text-center text-stone-400">
     Завантаження...
@@ -174,11 +186,11 @@
 
           <!-- City (hidden for region k — Kyiv) -->
           <div id="dtek-city-group">
-            <label class="block text-xs font-medium text-stone-600 mb-1">Місто</label>
+            <label class="block text-xs font-medium text-stone-600 mb-1">Населений пункт</label>
             <div class="relative">
               <input id="dtek-city-input" type="text" oninput="onDtekCityInput()" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
-                placeholder="Введіть місто..." />
+                placeholder="Введіть населений пункт..." />
               <span id="dtek-city-spinner" class="hidden dtek-spinner"></span>
               <div id="dtek-city-dropdown" class="hidden absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"></div>
             </div>
@@ -250,6 +262,35 @@
     const token = window.location.pathname.split('/').pop();
     const API = '/api/settings/' + token;
     let monitor = null;
+    let settingsPassword = localStorage.getItem('settings_pwd_' + token) || '';
+
+    function apiHeaders() {
+      return { 'Content-Type': 'application/json', 'X-Settings-Password': settingsPassword };
+    }
+
+    function showPasswordGate(withError) {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('password-gate').classList.remove('hidden');
+      document.getElementById('password-error').classList.toggle('hidden', !withError);
+      document.getElementById('password-input').focus();
+    }
+
+    async function submitPassword() {
+      const pwd = document.getElementById('password-input').value.trim();
+      if (!pwd) return;
+      settingsPassword = pwd;
+      document.getElementById('password-gate').classList.add('hidden');
+      document.getElementById('loading').classList.remove('hidden');
+      const ok = await tryLoad();
+      if (!ok) {
+        settingsPassword = '';
+        showPasswordGate(true);
+      }
+    }
+
+    document.getElementById('password-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitPassword();
+    });
 
     // ── DTEK autocomplete state ───────────────────────────────────────
     let dtekCityValue = '';   // exact city selected from suggestion
@@ -382,7 +423,7 @@
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ dtek_enabled: value })
         });
         if (res.ok) { showToast('Збережено'); }
@@ -396,13 +437,13 @@
       const street = document.getElementById('dtek-street-input').value.trim();
       const house = document.getElementById('dtek-house-input').value.trim();
       if (!region) { showToast('Оберіть регіон'); return; }
-      if (region !== 'k' && !city) { showToast('Введіть місто'); return; }
+      if (region !== 'k' && !city) { showToast('Введіть населений пункт'); return; }
       if (!street) { showToast('Введіть вулицю'); return; }
       if (!house) { showToast('Введіть номер будинку'); return; }
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ dtek_region: region, dtek_city: city, dtek_street: street, dtek_house: house })
         });
         if (res.ok) { showToast('Адресу ДТЕК збережено'); reload(); }
@@ -508,19 +549,38 @@
       document.getElementById('content').classList.remove('hidden');
     }
 
-    async function load() {
+    // tryLoad fetches settings with the current password. Returns true on success.
+    async function tryLoad() {
       try {
-        const res = await fetch(API);
+        const res = await fetch(API, { headers: apiHeaders() });
         if (res.status === 404) {
           document.getElementById('loading').classList.add('hidden');
           document.getElementById('not-found').classList.remove('hidden');
-          return;
+          return true;
         }
+        if (res.status === 401) return false;
         const data = await res.json();
+        localStorage.setItem('settings_pwd_' + token, settingsPassword);
         render(data);
         loadRegions();
+        return true;
       } catch (e) {
         document.getElementById('loading').textContent = 'Помилка завантаження.';
+        return true;
+      }
+    }
+
+    async function load() {
+      if (settingsPassword) {
+        const ok = await tryLoad();
+        if (!ok) {
+          settingsPassword = '';
+          localStorage.removeItem('settings_pwd_' + token);
+          showPasswordGate(false);
+        }
+      } else {
+        document.getElementById('loading').classList.add('hidden');
+        showPasswordGate(false);
       }
     }
 
@@ -530,7 +590,7 @@
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ name })
         });
         if (res.ok) {
@@ -549,7 +609,7 @@
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ address })
         });
         if (res.ok) {
@@ -565,7 +625,7 @@
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ [field]: value })
         });
         if (res.ok) {
@@ -620,7 +680,7 @@
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ outage_region: region, outage_group: group })
         });
         if (res.ok) {
@@ -634,7 +694,7 @@
 
     async function stopMonitor() {
       try {
-        const res = await fetch(API + '/stop', { method: 'POST' });
+        const res = await fetch(API + '/stop', { method: 'POST', headers: apiHeaders() });
         if (res.ok) {
           showToast('Моніторинг призупинено');
           reload();
@@ -646,7 +706,7 @@
 
     async function resumeMonitor() {
       try {
-        const res = await fetch(API + '/resume', { method: 'POST' });
+        const res = await fetch(API + '/resume', { method: 'POST', headers: apiHeaders() });
         if (res.ok) {
           showToast('Моніторинг відновлено');
           reload();
@@ -667,7 +727,7 @@
     async function deleteMonitor() {
       closeDeleteModal();
       try {
-        const res = await fetch(API, { method: 'DELETE' });
+        const res = await fetch(API, { method: 'DELETE', headers: apiHeaders() });
         if (res.ok) {
           document.getElementById('content').classList.add('hidden');
           document.getElementById('deleted').classList.remove('hidden');
@@ -688,7 +748,7 @@
       try {
         const res = await fetch(API, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders(),
           body: JSON.stringify({ offline_threshold_sec: sec })
         });
         if (res.ok) {
@@ -703,7 +763,7 @@
 
     async function reload() {
       try {
-        const res = await fetch(API);
+        const res = await fetch(API, { headers: apiHeaders() });
         if (res.ok) render(await res.json());
       } catch (e) {}
     }

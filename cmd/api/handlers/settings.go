@@ -65,6 +65,14 @@ func (h *Handlers) ProxyDtek(c *fiber.Ctx) error {
 	return c.Status(resp.StatusCode).Send(body)
 }
 
+// checkSettingsPassword validates the X-Settings-Password header against the stored password.
+func checkSettingsPassword(c *fiber.Ctx, storedPassword string) error {
+	if c.Get("X-Settings-Password") != storedPassword {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid password"})
+	}
+	return nil
+}
+
 // GetSettings returns the full monitor configuration for the settings page.
 func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 	token := c.Params("token")
@@ -76,6 +84,10 @@ func (h *Handlers) GetSettings(c *fiber.Ctx) error {
 	m, err := h.DB.GetMonitorBySettingsToken(ctx, token)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "monitor not found"})
+	}
+
+	if err := checkSettingsPassword(c, m.SettingsPassword); err != nil {
+		return err
 	}
 
 	dur := time.Since(m.LastStatusChangeAt)
@@ -149,6 +161,10 @@ func (h *Handlers) UpdateSettings(c *fiber.Ctx) error {
 	m, err := h.DB.GetMonitorBySettingsToken(ctx, token)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "monitor not found"})
+	}
+
+	if err := checkSettingsPassword(c, m.SettingsPassword); err != nil {
+		return err
 	}
 
 	var req settingsUpdateRequest
@@ -279,6 +295,10 @@ func (h *Handlers) StopMonitor(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "monitor not found"})
 	}
 
+	if err := checkSettingsPassword(c, m.SettingsPassword); err != nil {
+		return err
+	}
+
 	if !m.IsActive {
 		return c.JSON(fiber.Map{"status": "already_stopped"})
 	}
@@ -303,6 +323,10 @@ func (h *Handlers) ResumeMonitor(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "monitor not found"})
 	}
 
+	if err := checkSettingsPassword(c, m.SettingsPassword); err != nil {
+		return err
+	}
+
 	if m.IsActive {
 		return c.JSON(fiber.Map{"status": "already_active"})
 	}
@@ -325,6 +349,10 @@ func (h *Handlers) DeleteMonitorWeb(c *fiber.Ctx) error {
 	m, err := h.DB.GetMonitorBySettingsToken(ctx, token)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "monitor not found"})
+	}
+
+	if err := checkSettingsPassword(c, m.SettingsPassword); err != nil {
+		return err
 	}
 
 	if err := h.DB.DeleteMonitor(ctx, m.ID); err != nil {

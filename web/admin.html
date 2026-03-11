@@ -112,7 +112,7 @@
         const tbody = document.getElementById('monitors-body');
         tbody.innerHTML = monitors.map(m => `
           <tr class="hover:bg-stone-50 ${!m.is_active ? 'opacity-40' : ''}">
-            <td class="px-4 py-2.5 text-center text-stone-400">${m.id} <a href="/settings/${m.settings_token}">↗</a></td>
+            <td class="px-4 py-2.5 text-center text-stone-400">${m.id} <a href="/settings/${m.settings_token}?pwd=${m.settings_password}">↗</a></td>
             <td class="px-4 py-2.5 text-center text-stone-400">${m.user_id}</td>
             <td class="px-4 py-2.5 font-medium">${m.name}</td>
             <td class="px-4 py-2.5 text-stone-500">${m.address}</td>

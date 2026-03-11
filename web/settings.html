@@ -262,6 +262,8 @@
     const token = window.location.pathname.split('/').pop();
     const API = '/api/settings/' + token;
     let monitor = null;
+    const urlPwd = new URLSearchParams(window.location.search).get('pwd');
+    if (urlPwd) localStorage.setItem('settings_pwd_' + token, urlPwd);
     let settingsPassword = localStorage.getItem('settings_pwd_' + token) || '';
 
     function apiHeaders() {

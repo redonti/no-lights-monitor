@@ -218,6 +218,51 @@ async function fetchInfo(page, { region, city, street }) {
   return { status, body }
 }
 
+// Shared helper: waits for DisconSchedule.streets to be available on the page
+// (may be set by deferred JS after the load event on non-Kyiv pages).
+async function waitForStreetsReady(page) {
+  await page
+    .waitForFunction(() => typeof DisconSchedule !== "undefined" && DisconSchedule.streets != null, {
+      timeout: 5000,
+    })
+    .catch(() => null)
+}
+
+// Filters run inside the browser context — only matching results are transferred back,
+// avoiding serialising the full streets dataset (several MB for large regions).
+
+export async function getMatchingCities(region, query) {
+  if (!browser) throw new Error("Browser not initialized.")
+  await ensureBrowser()
+  const page = await getPage(String(region).toLowerCase())
+  await waitForStreetsReady(page)
+  return page.evaluate((q) => {
+    if (typeof DisconSchedule === "undefined" || !DisconSchedule.streets) return []
+    const streets = DisconSchedule.streets
+    if (Array.isArray(streets)) return []
+    const qLower = q.toLowerCase()
+    return Object.keys(streets).filter((c) => c.toLowerCase().includes(qLower))
+  }, query)
+}
+
+export async function getMatchingStreets(region, city, query) {
+  if (!browser) throw new Error("Browser not initialized.")
+  await ensureBrowser()
+  const page = await getPage(String(region).toLowerCase())
+  await waitForStreetsReady(page)
+  return page.evaluate(
+    ({ city: c, q }) => {
+      if (typeof DisconSchedule === "undefined" || !DisconSchedule.streets) return []
+      const streets = DisconSchedule.streets
+      // Kyiv: flat array. Other regions: { city: [streets] }.
+      const list = Array.isArray(streets) ? streets : streets[c] ?? []
+      const qLower = q.toLowerCase()
+      return list.filter((s) => s.toLowerCase().includes(qLower))
+    },
+    { city, q: query }
+  )
+}
+
 export async function getOutageInfo({ region, city, street }) {
   if (!browser) throw new Error("Browser not initialized.")
   await ensureBrowser()

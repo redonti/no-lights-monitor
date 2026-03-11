@@ -53,37 +53,34 @@ const server = http.createServer(async (req, res) => {
     //   neither       → city suggestions
     let what, scraperCall
     if (region === "k") {
-      const kCtx = getKyivContext()
-      if (!kCtx) {
-        res.writeHead(503, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: "Kyiv lookup unavailable — context not initialized" }))
-        log(503)
-        return
-      }
       if (city || street) {
+        const kCtx = getKyivContext()
+        if (!kCtx) {
+          res.writeHead(503, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: "Kyiv lookup unavailable — context not initialized" }))
+          log(503)
+          return
+        }
         what = "houses"
         console.log(`[k] House lookup (Kyiv) — street="${city || street}" q="${q}"`)
         scraperCall = getKyivHouseSuggestions(kCtx, city || street, q)
       } else {
         what = "streets"
         console.log(`[k] Street lookup (Kyiv) — q="${q}"`)
-        scraperCall = getKyivStreetSuggestions(kCtx, q)
+        scraperCall = getKyivStreetSuggestions(q)
       }
     } else if (city && street) {
-      const browser = getBrowser()
       what = "houses"
       console.log(`[${region}] House lookup — city="${city}" street="${street}" q="${q}"`)
-      scraperCall = getHouseSuggestions(browser, region, city, street, q)
+      scraperCall = getHouseSuggestions(getBrowser(), region, city, street, q)
     } else if (city) {
-      const browser = getBrowser()
       what = "streets"
       console.log(`[${region}] Street lookup — city="${city}" q="${q}"`)
-      scraperCall = getStreetSuggestions(browser, region, city, q)
+      scraperCall = getStreetSuggestions(region, city, q)
     } else {
-      const browser = getBrowser()
       what = "cities"
       console.log(`[${region}] City lookup — q="${q}"`)
-      scraperCall = getCitySuggestions(browser, region, q)
+      scraperCall = getCitySuggestions(region, q)
     }
 
     try {

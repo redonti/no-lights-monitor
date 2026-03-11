@@ -1,3 +1,5 @@
+import { getMatchingCities, getMatchingStreets } from "../scraper.js"
+
 const shutdownsPages = {
   k:  "https://www.dtek-kem.com.ua/ua/shutdowns",
   kr: "https://www.dtek-krem.com.ua/ua/shutdowns",
@@ -6,7 +8,7 @@ const shutdownsPages = {
   d:  "https://www.dtek-dem.com.ua/ua/shutdowns",
 }
 
-// Persistent lookup page per region, reused between requests.
+// Persistent lookup page per region, reused for house suggestions only.
 // A promise queue (tail) ensures only one lookup runs per region at a time.
 const pool = new Map() // region → { page: Page | null, tail: Promise }
 const lastUsed = new Map()  // region → Date.now() of last completed lookup
@@ -47,17 +49,14 @@ async function openPage(browser, region) {
 }
 
 async function clearForm(page, region) {
-  // Dismiss any open dropdown, then clear the top-level field to reset the whole form.
   await page.keyboard.press("Escape")
   if (region === "k") {
-    // Kyiv has no city input — clear street to cascade-reset house_num
     await page.fill('.discon-inputs input[name="street"]', "")
     await page
       .waitForSelector('.discon-inputs input[name="house_num"][disabled]', { timeout: 1000 })
       .catch(() => null)
   } else {
     await page.fill('.discon-inputs input[name="city"]', "")
-    // Wait for the street input to become disabled (cascading reset)
     await page
       .waitForSelector('.discon-inputs input[name="street"][disabled]', { timeout: 1000 })
       .catch(() => null)
@@ -74,7 +73,6 @@ async function withPage(browser, region, fn) {
   const prev = entry.tail
   entry.tail = slot
 
-  // Wait for any ongoing operation on this region's page
   await prev
 
   const t0 = Date.now()
@@ -89,7 +87,6 @@ async function withPage(browser, region, fn) {
     lastUsed.set(region, Date.now())
     return result
   } catch (err) {
-    // Force page recreation on next use if something went wrong
     console.error(`[lookup:${region}] Failed (${Date.now() - t0}ms):`, err.message)
     entry.page = null
     throw err
@@ -105,9 +102,6 @@ async function readSuggestions(page, inputName) {
     })
     .catch(() => null)
 
-  // innerText respects CSS text-transform:capitalize, giving "М. Одеса" or "Дорога Кільцева".
-  // DTEK's API wants lowercase prefixes: "м. Одеса", "вул. Корольова Академіка", "дорога Кільцева".
-  // We lowercase the leading word whether it's an abbreviation ("Вул.") or a full word ("Дорога").
   const raw = await page.evaluate((name) => {
     const input = document.querySelector(`.discon-inputs input[name="${name}"]`)
     const autocomplete = input?.closest(".autocomplete")
@@ -128,24 +122,23 @@ async function selectSuggestion(page, inputName) {
   await item.click()
 }
 
-export async function getCitySuggestions(browser, region, query) {
-  return withPage(browser, region, async (page) => {
-    await page.fill('.discon-inputs input[name="city"]', query)
-    return readSuggestions(page, "city")
-  })
+// City and street suggestions query DisconSchedule.streets in the browser context.
+// Filtering runs in-browser so only matching results are transferred back.
+
+export async function getCitySuggestions(region, query) {
+  return getMatchingCities(region, query)
 }
 
-export async function getStreetSuggestions(browser, region, city, query) {
-  return withPage(browser, region, async (page) => {
-    await page.fill('.discon-inputs input[name="city"]', city)
-    await readSuggestions(page, "city")
-    await selectSuggestion(page, "city")
-
-    await page.waitForSelector('.discon-inputs input[name="street"]:not([disabled])', { timeout: 3000 })
-    await page.fill('.discon-inputs input[name="street"]', query)
-    return readSuggestions(page, "street")
-  })
+export async function getStreetSuggestions(region, city, query) {
+  return getMatchingStreets(region, city, query)
 }
+
+// Kyiv (region "k") has no city input — streets is a flat array keyed by nothing.
+export async function getKyivStreetSuggestions(query) {
+  return getMatchingStreets("k", null, query)
+}
+
+// House suggestions still require form automation (cascade: city → street → house_num).
 
 export async function getHouseSuggestions(browser, region, city, street, query) {
   return withPage(browser, region, async (page) => {
@@ -164,16 +157,8 @@ export async function getHouseSuggestions(browser, region, city, street, query) 
   })
 }
 
-// Kyiv (region "k") has no city input — the form starts directly at street.
-export async function getKyivStreetSuggestions(browser, query) {
-  return withPage(browser, "k", async (page) => {
-    await page.fill('.discon-inputs input[name="street"]', query)
-    return readSuggestions(page, "street")
-  })
-}
-
-export async function getKyivHouseSuggestions(browser, street, query) {
-  return withPage(browser, "k", async (page) => {
+export async function getKyivHouseSuggestions(ctx, street, query) {
+  return withPage(ctx, "k", async (page) => {
     await page.fill('.discon-inputs input[name="street"]', street)
     await readSuggestions(page, "street")
     await selectSuggestion(page, "street")

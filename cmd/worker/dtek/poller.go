@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"no-lights-monitor/internal/database"
@@ -72,6 +73,7 @@ func (p *Poller) run(ctx context.Context) {
 type outageResponse struct {
 	IsOutage bool `json:"isOutage"`
 	Data     struct {
+		Type      string `json:"type"`
 		SubType   string `json:"sub_type"`
 		StartDate string `json:"start_date"`
 		EndDate   string `json:"end_date"`
@@ -123,8 +125,14 @@ func (p *Poller) check(ctx context.Context, m *models.Monitor) error {
 
 	isUpdate := isUpdateCheck(m)
 
-	if !result.IsOutage {
-		log.Printf("[dtek] monitor %d: no outage found at DTEK", m.ID)
+	isEmergency := strings.Contains(result.Data.SubType, "Екстренн") || strings.Contains(result.Data.Type, "Екстренн")
+
+	if !result.IsOutage || !isEmergency {
+		if !result.IsOutage {
+			log.Printf("[dtek] monitor %d: no outage found at DTEK", m.ID)
+		} else {
+			log.Printf("[dtek] monitor %d: planned outage only (sub_type=%q), skipping", m.ID, result.Data.SubType)
+		}
 		if isUpdate {
 			// Snooze the re-check so we don't hammer DTEK on every poll.
 			snooze := time.Now().Add(recheckSnooze)
@@ -155,6 +163,7 @@ func (p *Poller) check(ctx context.Context, m *models.Monitor) error {
 			ChannelID:       m.ChannelID,
 			OwnerTelegramID: ownerID,
 			MonitorName:     m.Name,
+			Type:            result.Data.Type,
 			SubType:         result.Data.SubType,
 			StartDate:       result.Data.StartDate,
 			EndDate:         result.Data.EndDate,
@@ -179,6 +188,7 @@ func (p *Poller) check(ctx context.Context, m *models.Monitor) error {
 		ChannelID:       m.ChannelID,
 		OwnerTelegramID: ownerID,
 		MonitorName:     m.Name,
+		Type:            result.Data.Type,
 		SubType:         result.Data.SubType,
 		StartDate:       result.Data.StartDate,
 		EndDate:         result.Data.EndDate,

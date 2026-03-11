@@ -212,7 +212,7 @@
           <div>
             <label class="block text-xs font-medium text-stone-600 mb-1">Будинок</label>
             <div class="relative">
-              <input id="dtek-house-input" type="text" oninput="setDtekSpinner('house', true); dtekDebounce(fetchDtekHouseSuggestions)" autocomplete="off" disabled
+              <input id="dtek-house-input" type="text" oninput="dtekHouseValue = ''; updateDtekSaveButton(); setDtekSpinner('house', true); dtekDebounce(fetchDtekHouseSuggestions)" autocomplete="off" disabled
                 class="w-full border border-stone-300 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Номер будинку" />
               <span id="dtek-house-spinner" class="hidden dtek-spinner"></span>
@@ -220,7 +220,7 @@
             </div>
           </div>
 
-          <button onclick="saveDtekAddress()" class="bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors">Зберегти адресу</button>
+          <button id="dtek-save-btn" onclick="saveDtekAddress()" disabled class="bg-stone-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-stone-900">Зберегти адресу</button>
         </div>
       </div>
 
@@ -297,6 +297,7 @@
     // ── DTEK autocomplete state ───────────────────────────────────────
     let dtekCityValue = '';   // exact city selected from suggestion
     let dtekStreetValue = ''; // exact street selected from suggestion
+    let dtekHouseValue = '';  // exact house selected from suggestion
     let dtekDebounceTimer = null;
 
     function dtekDebounce(fn) {
@@ -323,6 +324,7 @@
       document.getElementById('dtek-city-group').classList.toggle('hidden', isKyiv);
       dtekCityValue = '';
       dtekStreetValue = '';
+      dtekHouseValue = '';
       document.getElementById('dtek-city-input').value = '';
       document.getElementById('dtek-street-input').value = '';
       document.getElementById('dtek-house-input').value = '';
@@ -346,6 +348,15 @@
       document.getElementById('dtek-city-input').disabled = !region;
       document.getElementById('dtek-street-input').disabled = !region || (!isKyiv && !dtekCityValue);
       document.getElementById('dtek-house-input').disabled = !dtekStreetValue;
+      updateDtekSaveButton();
+    }
+
+    function updateDtekSaveButton() {
+      const region = document.getElementById('dtek-region').value;
+      const isKyiv = region === 'k';
+      const ready = !!region && (isKyiv || !!dtekCityValue) && !!dtekStreetValue && !!dtekHouseValue;
+      const btn = document.getElementById('dtek-save-btn');
+      btn.disabled = !ready;
     }
 
     function showDtekDropdown(dropdownId, suggestions, onSelect) {
@@ -382,6 +393,7 @@
         document.getElementById('dtek-city-input').value = s;
         dtekCityValue = s;
         dtekStreetValue = '';
+        dtekHouseValue = '';
         document.getElementById('dtek-street-input').value = '';
         document.getElementById('dtek-house-input').value = '';
         document.getElementById('dtek-city-dropdown').classList.add('hidden');
@@ -400,6 +412,7 @@
       showDtekDropdown('dtek-street-dropdown', suggestions, (s) => {
         document.getElementById('dtek-street-input').value = s;
         dtekStreetValue = s;
+        dtekHouseValue = '';
         document.getElementById('dtek-house-input').value = '';
         document.getElementById('dtek-street-dropdown').classList.add('hidden');
         updateDtekFieldStates();
@@ -417,7 +430,9 @@
       setDtekSpinner('house', false);
       showDtekDropdown('dtek-house-dropdown', suggestions, (s) => {
         document.getElementById('dtek-house-input').value = s;
+        dtekHouseValue = s;
         document.getElementById('dtek-house-dropdown').classList.add('hidden');
+        updateDtekSaveButton();
       });
     }
 
@@ -436,17 +451,15 @@
     async function saveDtekAddress() {
       const region = document.getElementById('dtek-region').value;
       const city = document.getElementById('dtek-city-input').value.trim();
-      const street = document.getElementById('dtek-street-input').value.trim();
-      const house = document.getElementById('dtek-house-input').value.trim();
       if (!region) { showToast('Оберіть регіон'); return; }
-      if (region !== 'k' && !city) { showToast('Введіть населений пункт'); return; }
-      if (!street) { showToast('Введіть вулицю'); return; }
-      if (!house) { showToast('Введіть номер будинку'); return; }
+      if (region !== 'k' && !city) { showToast('Оберіть населений пункт зі списку'); return; }
+      if (!dtekStreetValue) { showToast('Оберіть вулицю зі списку'); return; }
+      if (!dtekHouseValue) { showToast('Оберіть будинок зі списку'); return; }
       try {
         const res = await fetch(API, {
           method: 'PUT',
           headers: apiHeaders(),
-          body: JSON.stringify({ dtek_region: region, dtek_city: city, dtek_street: street, dtek_house: house })
+          body: JSON.stringify({ dtek_region: region, dtek_city: city, dtek_street: dtekStreetValue, dtek_house: dtekHouseValue })
         });
         if (res.ok) { showToast('Адресу ДТЕК збережено'); reload(); }
         else { showToast('Помилка збереження'); }
@@ -529,6 +542,7 @@
       document.getElementById('dtek-house-input').value = m.dtek_house || '';
       dtekCityValue = m.dtek_city || '';
       dtekStreetValue = m.dtek_street || '';
+      dtekHouseValue = m.dtek_house || '';
       document.getElementById('dtek-city-group').classList.toggle('hidden', m.dtek_region === 'k');
       updateDtekFieldStates();
       if (m.dtek_region && m.dtek_street && m.dtek_house) {

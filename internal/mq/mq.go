@@ -104,6 +104,7 @@ type DtekOutageMsg struct {
 	ChannelID       int64            `json:"channel_id"`
 	OwnerTelegramID int64            `json:"owner_telegram_id"`
 	MonitorName     string           `json:"monitor_name"`
+	Type            string           `json:"type"`
 	SubType         string           `json:"sub_type"`
 	StartDate       string           `json:"start_date"`
 	EndDate         string           `json:"end_date"`

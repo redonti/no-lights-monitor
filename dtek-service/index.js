@@ -148,13 +148,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     const houseData = info.data[house] || {}
-    const { sub_type, start_date, end_date, type, sub_type_reason } = houseData
+    const { sub_type = "", start_date = "", end_date = "", type = "", sub_type_reason = [] } = houseData
     const isOutage =
       sub_type !== "" || start_date !== "" || end_date !== "" || type !== ""
 
     res.writeHead(200, { "Content-Type": "application/json" })
     res.end(
-      JSON.stringify({ isOutage, data: { sub_type, start_date, end_date, sub_type_reason }, updateTimestamp: info.updateTimestamp })
+      JSON.stringify({ isOutage, data: { type, sub_type, start_date, end_date, sub_type_reason }, updateTimestamp: info.updateTimestamp })
     )
     log(200, ` isOutage=${isOutage}`)
   } catch (error) {

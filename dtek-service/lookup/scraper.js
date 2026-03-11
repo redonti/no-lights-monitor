@@ -105,9 +105,9 @@ async function readSuggestions(page, inputName) {
     })
     .catch(() => null)
 
-  // innerText respects CSS text-transform:capitalize, giving "М. Одеса".
-  // DTEK's API wants lowercase prefixes: "м. Одеса", "вул. Корольова Академіка".
-  // So we lowercase only the leading abbreviation (е.g. "М." → "м.").
+  // innerText respects CSS text-transform:capitalize, giving "М. Одеса" or "Дорога Кільцева".
+  // DTEK's API wants lowercase prefixes: "м. Одеса", "вул. Корольова Академіка", "дорога Кільцева".
+  // We lowercase the leading word whether it's an abbreviation ("Вул.") or a full word ("Дорога").
   const raw = await page.evaluate((name) => {
     const input = document.querySelector(`.discon-inputs input[name="${name}"]`)
     const autocomplete = input?.closest(".autocomplete")
@@ -118,7 +118,7 @@ async function readSuggestions(page, inputName) {
       .filter(Boolean)
   }, inputName)
 
-  return raw.map((s) => s.replace(/^([^\s.]+\.)/, (p) => p.toLowerCase()))
+  return raw.map((s) => s.replace(/^(\S+)/, (p) => p.toLowerCase()))
 }
 
 async function selectSuggestion(page, inputName) {

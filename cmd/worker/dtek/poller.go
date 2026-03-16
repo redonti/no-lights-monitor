@@ -125,7 +125,8 @@ func (p *Poller) check(ctx context.Context, m *models.Monitor) error {
 
 	isUpdate := isUpdateCheck(m)
 
-	isEmergency := strings.Contains(result.Data.SubType, "Екстренн") || strings.Contains(result.Data.Type, "Екстренн")
+	isEmergency := strings.Contains(result.Data.SubType, "Екстренн") || strings.Contains(result.Data.Type, "Екстренн") ||
+		strings.Contains(result.Data.SubType, "Аварійн") || strings.Contains(result.Data.Type, "Аварійн")
 
 	if !result.IsOutage || !isEmergency {
 		if !result.IsOutage {

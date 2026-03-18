@@ -229,21 +229,8 @@ func (l *listener) handleGraphReady(ctx context.Context, payload []byte) {
 			if l.handleChannelError(ctx, msg.MonitorID, msg.MonitorName, err) {
 				return
 			}
-			// Fallback: send new message.
-			log.Printf("[listener] graph monitor %d: edit failed (%v), sending new", msg.MonitorID, err)
-			fallback := &tele.Photo{
-				File:    tele.FromReader(namedReader(msg.ImagePNG, "graph.png")),
-				Caption: msg.Caption,
-			}
-			sent, sendErr := l.bot.Send(chat, fallback, silent)
-			if sendErr != nil {
-				l.handleChannelError(ctx, msg.MonitorID, msg.MonitorName, sendErr)
-				return
-			}
-			if err := l.db.UpdateGraphMessage(ctx, msg.MonitorID, sent.ID, msg.WeekStart); err != nil {
-				log.Printf("[listener] graph monitor %d: failed to save message id: %v", msg.MonitorID, err)
-			}
-			log.Printf("[listener] graph monitor %d: sent fallback (msg %d)", msg.MonitorID, sent.ID)
+			// Edit failed (e.g. Telegram API timeout) — skip, will retry on next hourly run.
+			log.Printf("[listener] graph monitor %d: edit failed (%v), will retry next run", msg.MonitorID, err)
 		} else {
 			log.Printf("[listener] graph monitor %d: updated (msg %d)", msg.MonitorID, msg.OldMsgID)
 		}

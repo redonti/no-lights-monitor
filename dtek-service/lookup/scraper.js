@@ -63,6 +63,18 @@ async function clearForm(page, region) {
   }
 }
 
+async function dismissModal(page) {
+  await page.evaluate(() => {
+    const m = document.getElementById("modal-attention")
+    if (!m || m.getAttribute("aria-hidden") === "true") return
+    if (typeof MicroModal !== "undefined") {
+      try { MicroModal.close("modal-attention") } catch (_) {}
+    }
+    m.setAttribute("aria-hidden", "true")
+    m.classList.remove("is-open")
+  }).catch(() => {})
+}
+
 async function withPage(browser, region, fn) {
   const entry = getEntry(region)
 
@@ -82,6 +94,7 @@ async function withPage(browser, region, fn) {
     } else {
       await clearForm(entry.page, region)
     }
+    await dismissModal(entry.page)
     const result = await fn(entry.page)
     console.log(`[lookup:${region}] Done (${Date.now() - t0}ms)`)
     lastUsed.set(region, Date.now())

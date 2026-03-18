@@ -130,10 +130,16 @@ func (u *Updater) runAll(ctx context.Context) {
 		log.Printf("[graph] failed to list monitors: %v", err)
 		return
 	}
-	log.Printf("[graph] updating graphs for %d monitors", len(monitors))
-
 	now := time.Now().UTC()
 	weekStart := currentWeekStart(now)
+
+	enabled := 0
+	for _, m := range monitors {
+		if m.GraphEnabled {
+			enabled++
+		}
+	}
+	log.Printf("[graph] updating graphs for %d monitors (%d with graph enabled)", len(monitors), enabled)
 
 	for _, m := range monitors {
 		if !m.GraphEnabled {

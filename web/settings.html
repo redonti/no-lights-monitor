@@ -174,7 +174,7 @@
           <!-- Region -->
           <div>
             <label class="block text-xs font-medium text-stone-600 mb-1">Регіон ДТЕК</label>
-            <select id="dtek-region" onchange="onDtekRegionChange()" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400">
+            <select id="dtek-region" onchange="onDtekRegionChange()" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 disabled:opacity-40 disabled:cursor-not-allowed">
               <option value="">Оберіть регіон</option>
               <option value="k">Київ (DTEK KEM)</option>
               <option value="kr">Київська область (DTEK KREM)</option>
@@ -343,18 +343,21 @@
     }
 
     function updateDtekFieldStates() {
+      const enabled = document.getElementById('toggle-dtek').checked;
       const region = document.getElementById('dtek-region').value;
       const isKyiv = region === 'k';
-      document.getElementById('dtek-city-input').disabled = !region;
-      document.getElementById('dtek-street-input').disabled = !region || (!isKyiv && !dtekCityValue);
-      document.getElementById('dtek-house-input').disabled = !dtekStreetValue;
+      document.getElementById('dtek-region').disabled = !enabled;
+      document.getElementById('dtek-city-input').disabled = !enabled || !region;
+      document.getElementById('dtek-street-input').disabled = !enabled || !region || (!isKyiv && !dtekCityValue);
+      document.getElementById('dtek-house-input').disabled = !enabled || !dtekStreetValue;
       updateDtekSaveButton();
     }
 
     function updateDtekSaveButton() {
+      const enabled = document.getElementById('toggle-dtek').checked;
       const region = document.getElementById('dtek-region').value;
       const isKyiv = region === 'k';
-      const ready = !!region && (isKyiv || !!dtekCityValue) && !!dtekStreetValue && !!dtekHouseValue;
+      const ready = enabled && !!region && (isKyiv || !!dtekCityValue) && !!dtekStreetValue && !!dtekHouseValue;
       const btn = document.getElementById('dtek-save-btn');
       btn.disabled = !ready;
     }
@@ -437,6 +440,7 @@
     }
 
     async function saveDtekEnabled(value) {
+      updateDtekFieldStates();
       try {
         const res = await fetch(API, {
           method: 'PUT',

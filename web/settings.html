@@ -7,11 +7,16 @@
   <link rel="icon" href="/favicon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/tailwind.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
     @keyframes dtek-spin { to { transform: rotate(360deg); } }
     .dtek-spinner { position:absolute; right:8px; top:calc(50% - 8px); width:16px; height:16px; border:2px solid #e7e5e4; border-top-color:#a8a29e; border-radius:50%; animation:dtek-spin 0.7s linear infinite; pointer-events:none; }
+    .toggle { position:relative; appearance:none; -webkit-appearance:none; width:2.25rem; height:1.25rem; border-radius:9999px; background-color:#d6d3d1; cursor:pointer; transition:background-color 150ms; flex-shrink:0; }
+    .toggle::after { content:''; position:absolute; top:2px; left:2px; width:1rem; height:1rem; border-radius:9999px; background:#fff; transition:transform 150ms; }
+    .toggle:checked { background-color:#1c1917; }
+    .toggle:checked::after { transform:translateX(1rem); }
+    .toggle:disabled { opacity:0.4; cursor:not-allowed; }
   </style>
 </head>
 <body class="bg-stone-100 text-stone-900 leading-relaxed">
@@ -24,7 +29,7 @@
   </header>
 
   <!-- Password gate -->
-  <div id="password-gate" class="hidden flex items-center justify-center px-5" style="min-height:calc(100vh - 57px)">
+  <div id="password-gate" class="hidden flex items-center justify-center px-5 min-h-[calc(100vh-57px)]">
     <div class="bg-white border border-stone-200 rounded-xl p-6 w-full max-w-sm">
       <h2 class="text-base font-semibold mb-1">Налаштування монітора</h2>
       <p class="text-sm text-stone-400 mb-4">Введіть пароль із повідомлення бота</p>
@@ -97,16 +102,16 @@
         <div class="space-y-3 mb-5">
           <label class="flex items-center justify-between cursor-pointer">
             <span class="text-sm text-stone-700">Показувати на публічній карті</span>
-            <input id="toggle-public" type="checkbox" onchange="saveToggle('is_public', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+            <input id="toggle-public" type="checkbox" onchange="saveToggle('is_public', this.checked)" class="toggle" />
           </label>
           <label class="flex items-center justify-between cursor-pointer">
             <span class="text-sm text-stone-700">Показувати адресу в сповіщеннях</span>
-            <input id="toggle-notify-address" type="checkbox" onchange="saveToggle('notify_address', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+            <input id="toggle-notify-address" type="checkbox" onchange="saveToggle('notify_address', this.checked)" class="toggle" />
           </label>
           <div>
             <label class="flex items-center justify-between cursor-pointer">
               <span class="text-sm text-stone-700">Публікувати графік аптайму в каналі</span>
-              <input id="toggle-graph" type="checkbox" onchange="saveToggle('graph_enabled', this.checked)" class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+              <input id="toggle-graph" type="checkbox" onchange="saveToggle('graph_enabled', this.checked)" class="toggle" />
             </label>
             <p class="text-xs text-stone-400 mt-1">Щотижневий графік наявності світла публікується в каналі та оновлюється щогодини.</p>
           </div>
@@ -141,14 +146,14 @@
             <div>
               <label class="flex items-center justify-between cursor-pointer">
                 <span id="label-notify-outage" class="text-sm text-stone-700">Показувати графік відключень в сповіщеннях</span>
-                <input id="toggle-notify-outage" type="checkbox" onchange="saveToggle('notify_outage', this.checked)" disabled class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4 disabled:opacity-40 disabled:cursor-not-allowed" />
+                <input id="toggle-notify-outage" type="checkbox" onchange="saveToggle('notify_outage', this.checked)" disabled class="toggle" />
               </label>
               <p class="text-xs text-stone-400 mt-1">До сповіщень про зміну статусу світла додається інформація про планові відключення, напр. ⏱ Наступне планове: 19:00 – 22:30</p>
             </div>
             <div>
               <label class="flex items-center justify-between cursor-pointer">
                 <span id="label-outage-photo" class="text-sm text-stone-700">Публікувати фото графіка відключень в каналі</span>
-                <input id="toggle-outage-photo" type="checkbox" onchange="saveToggle('outage_photo_enabled', this.checked)" disabled class="w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4 disabled:opacity-40 disabled:cursor-not-allowed" />
+                <input id="toggle-outage-photo" type="checkbox" onchange="saveToggle('outage_photo_enabled', this.checked)" disabled class="toggle" />
               </label>
               <p class="text-xs text-stone-400 mt-1">Фото розкладу відключень публікується в каналі та оновлюється щодня.</p>
             </div>
@@ -166,7 +171,7 @@
             </div>
             <p class="text-xs text-stone-400 mt-0.5">Якщо світла немає — перевіряє адресу в ДТЕК і сповіщає про аварійне відключення</p>
           </div>
-          <input id="toggle-dtek" type="checkbox" onchange="saveDtekEnabled(this.checked)" class="mt-1 w-9 h-5 rounded-full appearance-none bg-stone-300 checked:bg-stone-900 relative cursor-pointer transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-transform checked:after:translate-x-4" />
+          <input id="toggle-dtek" type="checkbox" onchange="saveDtekEnabled(this.checked)" class="toggle mt-1" />
         </div>
         <p id="dtek-current" class="text-xs text-stone-400 mb-4"></p>
 

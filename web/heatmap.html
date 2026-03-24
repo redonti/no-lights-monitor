@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/css/tailwind.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { margin: 0; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
     #map { width: 100vw; height: 100vh; }
@@ -39,9 +39,9 @@
       <!-- Choropleth color scale -->
       <div class="space-y-1 text-stone-600 mb-2">
         <div class="flex items-center gap-2">
-          <div style="width:90px;height:10px;border-radius:4px;background:linear-gradient(to right,#4ade80 0%,#fbbf24 20%,#dc2626 50%,#7f1d1d 100%);flex-shrink:0"></div>
+          <div class="w-[90px] h-[10px] rounded shrink-0" style="background:linear-gradient(to right,#4ade80 0%,#fbbf24 20%,#dc2626 50%,#7f1d1d 100%)"></div>
         </div>
-        <div class="flex justify-between text-xs text-stone-400" style="width:90px">
+        <div class="flex justify-between text-xs text-stone-400 w-[90px]">
           <span>0%</span><span>20%</span><span>50%</span><span>100%</span>
         </div>
         <div class="text-xs text-stone-500">% без світла (<span id="choro-size-label">~8 км</span>)</div>
@@ -53,24 +53,24 @@
       <div class="text-stone-600 mb-2">
         <div class="text-xs font-medium text-stone-500 mb-1">Маркери (масштаб ≥ 12)</div>
         <div class="flex items-center gap-1.5 text-xs text-stone-500 mb-0.5">
-          <div style="width:10px;height:10px;border-radius:50%;background:#fb923c;flex-shrink:0"></div>
-          <div style="width:10px;height:10px;border-radius:50%;background:#f97316;flex-shrink:0"></div>
-          <div style="width:10px;height:10px;border-radius:50%;background:#dc2626;flex-shrink:0"></div>
-          <div style="width:10px;height:10px;border-radius:50%;background:#7f1d1d;flex-shrink:0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-orange-400 shrink-0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-orange-500 shrink-0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-red-600 shrink-0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-red-950 shrink-0"></div>
           Без світла
         </div>
         <div class="flex items-center gap-1.5 text-xs text-stone-500 mb-0.5">
-          <div style="width:10px;height:10px;border-radius:50%;background:#86efac;flex-shrink:0"></div>
-          <div style="width:10px;height:10px;border-radius:50%;background:#4ade80;flex-shrink:0"></div>
-          <div style="width:10px;height:10px;border-radius:50%;background:#16a34a;flex-shrink:0"></div>
-          <div style="width:10px;height:10px;border-radius:50%;background:#14532d;flex-shrink:0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-green-300 shrink-0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-green-400 shrink-0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-green-600 shrink-0"></div>
+          <div class="w-[10px] h-[10px] rounded-full bg-green-950 shrink-0"></div>
           Зі світлом
         </div>
         <div class="flex gap-1.5 text-xs text-stone-400">
-          <span style="width:10px;text-align:center;flex-shrink:0">0</span>
-          <span style="width:10px;text-align:center;flex-shrink:0">4</span>
-          <span style="width:10px;text-align:center;flex-shrink:0">8</span>
-          <span style="width:16px;text-align:center;flex-shrink:0">12+</span>
+          <span class="w-[10px] text-center shrink-0">0</span>
+          <span class="w-[10px] text-center shrink-0">4</span>
+          <span class="w-[10px] text-center shrink-0">8</span>
+          <span class="w-[16px] text-center shrink-0">12+</span>
           <span>год</span>
         </div>
       </div>
@@ -100,7 +100,7 @@
   </div>
 
   <!-- Stats badge -->
-  <div id="stats-badge" class="fixed bottom-6 right-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-600 hidden md:block" style="display:none">
+  <div id="stats-badge" class="fixed bottom-6 right-6 z-[1000] bg-white/95 backdrop-blur-lg border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-600 hidden md:block">
     Завантаження...
   </div>
 

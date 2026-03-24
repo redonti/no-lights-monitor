@@ -21,6 +21,7 @@ const monitorColumns = `id, user_id, token, name, address, latitude, longitude,
 	dtek_enabled, dtek_region, dtek_city, dtek_street, dtek_house, dtek_outage_notified_at,
 	dtek_outage_recheck_at, dtek_outage_message_id,
 	offline_threshold_sec, settings_password,
+	skip_outage_photo_if_no_outages,
 	created_at, deleted_at`
 
 // monitorColumnsAliased is the same as monitorColumns but with table alias prefix for JOINs.
@@ -33,6 +34,7 @@ const monitorColumnsAliased = `m.id, m.user_id, m.token, m.name, m.address, m.la
 	m.dtek_enabled, m.dtek_region, m.dtek_city, m.dtek_street, m.dtek_house, m.dtek_outage_notified_at,
 	m.dtek_outage_recheck_at, m.dtek_outage_message_id,
 	m.offline_threshold_sec, m.settings_password,
+	m.skip_outage_photo_if_no_outages,
 	m.created_at, m.deleted_at`
 
 const userColumns = `id, telegram_id, username, first_name, created_at`
@@ -117,6 +119,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS settings_password TEXT NOT NULL DEFAULT left(replace(gen_random_uuid()::text, '-', ''), 8);
 	UPDATE monitors SET settings_password = left(replace(gen_random_uuid()::text, '-', ''), 8) WHERE settings_password = '';
+	ALTER TABLE monitors ADD COLUMN IF NOT EXISTS skip_outage_photo_if_no_outages BOOLEAN NOT NULL DEFAULT FALSE;
 
 	CREATE INDEX IF NOT EXISTS idx_monitors_token   ON monitors(token);
 	CREATE INDEX IF NOT EXISTS idx_monitors_settings_token ON monitors(settings_token);
@@ -328,6 +331,14 @@ func (db *DB) SetMonitorGraphEnabled(ctx context.Context, id int64, enabled bool
 	_, err := db.Pool.Exec(ctx, `
 		UPDATE monitors SET graph_enabled = $2 WHERE id = $1
 	`, id, enabled)
+	return err
+}
+
+// SetMonitorSkipOutagePhotoIfNoOutages toggles whether to skip the daily outage photo when no outages are scheduled.
+func (db *DB) SetMonitorSkipOutagePhotoIfNoOutages(ctx context.Context, id int64, skip bool) error {
+	_, err := db.Pool.Exec(ctx, `
+		UPDATE monitors SET skip_outage_photo_if_no_outages = $2 WHERE id = $1
+	`, id, skip)
 	return err
 }
 

@@ -157,6 +157,13 @@
               </label>
               <p class="text-xs text-stone-400 mt-1">Фото розкладу відключень публікується в каналі та оновлюється щодня.</p>
             </div>
+            <div>
+              <label class="flex items-center justify-between cursor-pointer">
+                <span id="label-skip-outage-photo" class="text-sm text-stone-700">Не публікувати фото якщо відключень не заплановано</span>
+                <input id="toggle-skip-outage-photo" type="checkbox" onchange="saveToggle('skip_outage_photo_if_no_outages', this.checked)" disabled class="toggle" />
+              </label>
+              <p class="text-xs text-stone-400 mt-1">Якщо на сьогодні немає жодного відключення — нове фото не публікується.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -535,6 +542,9 @@
       document.getElementById('toggle-outage-photo').checked = m.outage_photo_enabled;
       document.getElementById('toggle-outage-photo').disabled = !hasGroup;
       document.getElementById('label-outage-photo').classList.toggle('opacity-40', !hasGroup);
+      document.getElementById('toggle-skip-outage-photo').checked = m.skip_outage_photo_if_no_outages;
+      document.getElementById('toggle-skip-outage-photo').disabled = !hasGroup;
+      document.getElementById('label-skip-outage-photo').classList.toggle('opacity-40', !hasGroup);
 
       // Outage display
       if (m.outage_group) {

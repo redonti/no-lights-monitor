@@ -107,6 +107,16 @@ func (u *Updater) runAll(ctx context.Context) {
 	}
 }
 
+// allLightsOn reports whether every hour in the schedule has power (no outages).
+func allLightsOn(hours map[string]string) bool {
+	for _, v := range hours {
+		if v != "yes" {
+			return false
+		}
+	}
+	return true
+}
+
 func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 	// If the existing photo is from a previous day, delete it and force a fresh fetch.
 	storedETag := m.OutagePhotoETag
@@ -132,6 +142,16 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 			log.Printf("[outage-photo] monitor %d: deleted stale photo, fetching new", m.ID)
 			m.OutagePhotoMessageID = 0
 			storedETag = ""
+		}
+	}
+
+	// If the toggle is enabled and there are no outages scheduled today, skip posting a new photo.
+	if m.OutagePhotoMessageID == 0 && m.SkipOutagePhotoIfNoOutages {
+		if fact, err := u.outage.GetGroupFact(m.OutageRegion, m.OutageGroup); err == nil {
+			if allLightsOn(fact.Hours) {
+				log.Printf("[outage-photo] monitor %d: no outages today, skipping photo", m.ID)
+				return nil
+			}
 		}
 	}
 

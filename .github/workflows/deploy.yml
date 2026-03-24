@@ -113,7 +113,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           command_timeout: 10m
           script: |
-            cd /opt/lights-monitor/no-lights-monitor
+            cd ~/no-lights-monitor
             git pull origin main
             docker compose pull
             docker compose up -d

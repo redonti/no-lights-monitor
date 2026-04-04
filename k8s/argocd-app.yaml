@@ -15,13 +15,13 @@ spec:
     path: k8s
     # Exclude this file itself to avoid ArgoCD trying to manage itself
     directory:
-      exclude: argocd-app.yaml
+      exclude: '{argocd-app.yaml,secret.example.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: nolights
   syncPolicy:
     automated:
-      prune: true      # Remove resources deleted from k8s/
+      prune: false     # Don't delete cluster resources missing from git (protects manually applied secrets)
       selfHeal: true   # Revert manual kubectl changes
     syncOptions:
       - CreateNamespace=true

@@ -580,3 +580,4 @@ func FormatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%d хв", minutes)
 }
+

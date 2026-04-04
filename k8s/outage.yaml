@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: outage
+  namespace: nolights
+spec:
+  selector:
+    app: outage
+  ports:
+    - port: 8090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outage
+  namespace: nolights
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: outage
+  template:
+    metadata:
+      labels:
+        app: outage
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: outage
+          image: ghcr.io/redonti/no-lights-monitor/outage:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8090
+          env:
+            - name: TZ
+              value: Europe/Kyiv
+            - name: OUTAGE_PORT
+              value: "8090"
+            - name: OUTAGE_FETCH_INTERVAL
+              value: "900"

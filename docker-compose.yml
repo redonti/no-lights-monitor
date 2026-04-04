@@ -59,9 +59,7 @@ services:
     image: redis:7-alpine
     ports:
       - "127.0.0.1:6379:6379"  # Bind to localhost only — do NOT expose to internet
-    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme} --appendonly yes
-    volumes:
-      - redisdata:/data
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
     restart: unless-stopped
     logging:
       driver: journald
@@ -215,5 +213,4 @@ services:
 
 volumes:
   pgdata:
-  redisdata:
   rabbitmqdata:

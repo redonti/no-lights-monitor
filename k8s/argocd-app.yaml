@@ -1,0 +1,27 @@
+# Apply once manually to register the app with ArgoCD:
+#   kubectl apply -f k8s/argocd-app.yaml
+#
+# Replace <yourdomain.com> and the repoURL with your actual values.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nolights
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/redonti/no-lights-monitor.git
+    targetRevision: main
+    path: k8s
+    # Exclude this file itself to avoid ArgoCD trying to manage itself
+    directory:
+      exclude: argocd-app.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nolights
+  syncPolicy:
+    automated:
+      prune: true      # Remove resources deleted from k8s/
+      selfHeal: true   # Revert manual kubectl changes
+    syncOptions:
+      - CreateNamespace=true

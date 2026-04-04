@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot
+  namespace: nolights
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bot
+  template:
+    metadata:
+      labels:
+        app: bot
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: bot
+          image: ghcr.io/redonti/no-lights-monitor/bot:latest
+          imagePullPolicy: Always
+          securityContext:
+            capabilities:
+              add: ["NET_RAW"]
+          env:
+            - name: TZ
+              value: Europe/Kyiv
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: DATABASE_URL
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: RABBITMQ_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASS)@rabbitmq:5672/
+            - name: BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: BOT_TOKEN
+            - name: BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: BASE_URL
+            - name: OUTAGE_SERVICE_URL
+              value: http://outage:8090
+            - name: TELEGRAM_CHAT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: TELEGRAM_CHAT_USERNAME

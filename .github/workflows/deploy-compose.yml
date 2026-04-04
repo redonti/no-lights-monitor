@@ -1,0 +1,29 @@
+name: Deploy (Docker Compose fallback)
+
+# Manual trigger only — run from GitHub Actions tab if you need to roll back to docker-compose
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/redonti/no-lights-monitor
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            cd ~/no-lights-monitor
+            git pull origin main
+            docker compose pull
+            docker compose up -d
+            docker compose restart nginx
+            docker image prune -f
+            echo "Deploy completed at $(date)"

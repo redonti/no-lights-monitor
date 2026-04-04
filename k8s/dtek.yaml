@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dtek
+  namespace: nolights
+spec:
+  selector:
+    app: dtek
+  ports:
+    - port: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dtek
+  namespace: nolights
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dtek
+  template:
+    metadata:
+      labels:
+        app: dtek
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: dtek
+          image: ghcr.io/redonti/no-lights-monitor/dtek:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: TZ
+              value: Europe/Kyiv
+            - name: PORT
+              value: "3000"

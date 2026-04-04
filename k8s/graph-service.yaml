@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: graph-service
+  namespace: nolights
+spec:
+  selector:
+    app: graph-service
+  ports:
+    - port: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-service
+  namespace: nolights
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graph-service
+  template:
+    metadata:
+      labels:
+        app: graph-service
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: graph-service
+          image: ghcr.io/redonti/no-lights-monitor/graph-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: TZ
+              value: Europe/Kyiv
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15

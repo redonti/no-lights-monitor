@@ -1,0 +1,22 @@
+# TLS is terminated at Cloudflare. Traefik receives plain HTTP from Cloudflare's edge.
+# Replace lights.spatki.xyz with your actual domain before applying.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nolights
+  namespace: nolights
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: lights.spatki.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8080

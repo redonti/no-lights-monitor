@@ -5,6 +5,7 @@ server.exe
 
 # Environment
 .env
+k8s/secret.yaml
 
 # IDE
 .idea/

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: nolights
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: worker
+          image: ghcr.io/redonti/no-lights-monitor/worker:latest
+          imagePullPolicy: Always
+          securityContext:
+            capabilities:
+              add: ["NET_RAW"]
+          env:
+            - name: TZ
+              value: Europe/Kyiv
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: REDIS_URL
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: RABBITMQ_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASS)@rabbitmq:5672/
+            - name: GRAPH_SERVICE_URL
+              value: http://graph-service:8000
+            - name: OUTAGE_SERVICE_URL
+              value: http://outage:8090
+            - name: DTEK_SERVICE_URL
+              value: http://dtek:3000
+            - name: OFFLINE_THRESHOLD
+              value: "300"
+            - name: PING_INTERVAL
+              value: "300"
+            - name: DTEK_POLL_INTERVAL
+              value: "900"

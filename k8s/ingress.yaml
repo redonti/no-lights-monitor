@@ -10,7 +10,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: lights.spatki.xyz
+    - host: lights-monitor.spatki.xyz
       http:
         paths:
           - path: /

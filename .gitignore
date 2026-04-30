@@ -6,6 +6,7 @@ server.exe
 # Environment
 .env
 k8s/secret.yaml
+k8s/db-secret.yaml
 
 # IDE
 .idea/

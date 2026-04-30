@@ -15,7 +15,7 @@ spec:
     path: k8s
     # Exclude this file itself to avoid ArgoCD trying to manage itself
     directory:
-      exclude: '{argocd-app.yaml,secret.example.yaml}'
+      exclude: '{argocd-app.yaml,secret.example.yaml,db-secret.example.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: nolights

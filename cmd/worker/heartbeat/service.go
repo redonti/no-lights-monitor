@@ -49,6 +49,10 @@ type Service struct {
 	notifier    Notifier
 	threshold   time.Duration
 	startupTime time.Time // when the service started, used for grace period
+
+	devModeMu   sync.Mutex
+	lastDevMode bool
+	devModeOffAt time.Time // when dev mode was last disabled, used for grace period
 }
 
 func NewService(db *database.DB, c *cache.Cache, notifier Notifier, thresholdSec int) *Service {
@@ -301,13 +305,42 @@ func (s *Service) StartPingChecker(ctx context.Context, intervalSec int) {
 	}
 }
 
+// checkDevMode reads the current dev mode state and records the timestamp when
+// it transitions from enabled to disabled so a grace period can be applied.
+// Returns true if dev mode is currently active.
+func (s *Service) checkDevMode(ctx context.Context) bool {
+	current := s.cache.IsDevMode(ctx)
+	s.devModeMu.Lock()
+	if s.lastDevMode && !current {
+		s.devModeOffAt = time.Now()
+		log.Printf("[heartbeat] dev mode disabled — grace period started (%s)", s.threshold)
+	}
+	s.lastDevMode = current
+	s.devModeMu.Unlock()
+	return current
+}
+
+// inDevModeGracePeriod returns true if we are still within the grace window
+// after dev mode was turned off.
+func (s *Service) inDevModeGracePeriod(now time.Time) bool {
+	s.devModeMu.Lock()
+	t := s.devModeOffAt
+	s.devModeMu.Unlock()
+	return !t.IsZero() && now.Sub(t) < s.threshold
+}
+
 // checkHeartbeatMonitors checks all heartbeat-type monitors for stale heartbeats
 // and triggers status change notifications when needed.
 func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
+	if s.checkDevMode(ctx) {
+		log.Println("[heartbeat] dev mode enabled — skipping heartbeat checks")
+		return
+	}
+
 	s.refreshMonitors(ctx)
 
 	now := time.Now()
-	inGracePeriod := now.Sub(s.startupTime) < s.threshold
+	inGracePeriod := now.Sub(s.startupTime) < s.threshold || s.inDevModeGracePeriod(now)
 
 	s.monitors.Range(func(key, value any) bool {
 		info := value.(*monitorInfo)
@@ -328,8 +361,13 @@ func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
 // checkPingMonitors first executes all ICMP pings concurrently, then checks
 // ping monitors for status changes.
 func (s *Service) checkPingMonitors(ctx context.Context) {
+	if s.checkDevMode(ctx) {
+		log.Println("[heartbeat] dev mode enabled — skipping ping checks")
+		return
+	}
+
 	now := time.Now()
-	inGracePeriod := now.Sub(s.startupTime) < s.threshold
+	inGracePeriod := now.Sub(s.startupTime) < s.threshold || s.inDevModeGracePeriod(now)
 
 	// Phase 1: Execute all ICMP pings concurrently.
 	// This ensures even 100 ping monitors complete within ~5 seconds (ping timeout).

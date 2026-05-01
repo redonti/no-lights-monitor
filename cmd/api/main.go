@@ -101,6 +101,8 @@ func main() {
 	if cfg.AdminLogin != "" && cfg.AdminPassword != "" {
 		admin := app.Group("/admin", handlers.BasicAuth(cfg.AdminLogin, cfg.AdminPassword))
 		admin.Get("/", h.AdminPage)
+		admin.Get("/api/settings", h.AdminGetSettings)
+		admin.Put("/api/settings", h.AdminSetSettings)
 		admin.Get("/api/users", h.AdminGetUsers)
 		admin.Get("/api/monitors", h.AdminGetMonitors)
 		admin.Get("/api/monitors/deleted", h.AdminGetDeletedMonitors)

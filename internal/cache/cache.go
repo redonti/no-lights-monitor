@@ -9,7 +9,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const heartbeatPrefix = "hb:"
+const (
+	heartbeatPrefix = "hb:"
+	devModeKey      = "app:dev_mode"
+)
 
 type Cache struct {
 	Client *redis.Client
@@ -29,6 +32,20 @@ func New(redisURL string) (*Cache, error) {
 
 func (c *Cache) Close() error {
 	return c.Client.Close()
+}
+
+// SetDevMode enables or disables dev mode globally.
+func (c *Cache) SetDevMode(ctx context.Context, enabled bool) error {
+	if enabled {
+		return c.Client.Set(ctx, devModeKey, "1", 0).Err()
+	}
+	return c.Client.Del(ctx, devModeKey).Err()
+}
+
+// IsDevMode returns true if dev mode is currently enabled.
+func (c *Cache) IsDevMode(ctx context.Context) bool {
+	val, err := c.Client.Get(ctx, devModeKey).Result()
+	return err == nil && val == "1"
 }
 
 // SetHeartbeat records the last heartbeat time for a monitor.

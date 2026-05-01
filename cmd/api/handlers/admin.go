@@ -9,6 +9,29 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// AdminGetSettings returns global app settings.
+func (h *Handlers) AdminGetSettings(c *fiber.Ctx) error {
+	ctx := context.Background()
+	return c.JSON(fiber.Map{
+		"dev_mode": h.Cache.IsDevMode(ctx),
+	})
+}
+
+// AdminSetSettings updates global app settings.
+func (h *Handlers) AdminSetSettings(c *fiber.Ctx) error {
+	var req struct {
+		DevMode bool `json:"dev_mode"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
+	}
+	ctx := context.Background()
+	if err := h.Cache.SetDevMode(ctx, req.DevMode); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update settings"})
+	}
+	return c.JSON(fiber.Map{"dev_mode": req.DevMode})
+}
+
 // BasicAuth returns middleware that protects routes with HTTP Basic Authentication.
 func BasicAuth(login, password string) fiber.Handler {
 	return func(c *fiber.Ctx) error {

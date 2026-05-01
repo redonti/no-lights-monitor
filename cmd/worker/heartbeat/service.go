@@ -101,12 +101,14 @@ func (s *Service) LoadMonitors(ctx context.Context) error {
 			LastChange:          m.LastStatusChangeAt,
 		})
 	}
+	metrics.ActiveMonitors.Set(float64(len(monitors)))
 	log.Printf("[heartbeat] loaded %d monitors into memory (grace period: %s)", len(monitors), s.threshold)
 	return nil
 }
 
 // RegisterMonitor adds a new monitor to the in-memory map (called after DB insert).
 func (s *Service) RegisterMonitor(m *models.Monitor) {
+	metrics.ActiveMonitors.Inc()
 	s.monitors.Store(m.Token, &monitorInfo{
 		ID:                  m.ID,
 		ChannelID:           m.ChannelID,
@@ -199,6 +201,7 @@ func (s *Service) SetMonitorNotifyOutage(token string, notifyOutage bool) bool {
 // This should be called after deleting a monitor from the database.
 func (s *Service) RemoveMonitor(token string) {
 	s.monitors.Delete(token)
+	metrics.ActiveMonitors.Dec()
 }
 
 // refreshMonitors re-reads all monitors from the DB and updates the in-memory map.
@@ -357,6 +360,8 @@ func (s *Service) checkHeartbeatMonitors(ctx context.Context) {
 		s.checkAndTransition(ctx, info, monitorID, now, inGracePeriod)
 		return true
 	})
+
+	metrics.WorkerLastCheckUnix.SetToCurrentTime()
 }
 
 // checkPingMonitors first executes all ICMP pings concurrently, then checks

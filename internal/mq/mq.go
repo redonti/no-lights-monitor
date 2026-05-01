@@ -8,6 +8,8 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"no-lights-monitor/internal/metrics"
 )
 
 // Exchange and queue/routing key constants.
@@ -190,11 +192,15 @@ func (p *Publisher) Publish(ctx context.Context, routingKey string, msg any) err
 	if err != nil {
 		return fmt.Errorf("marshal message: %w", err)
 	}
-	return p.ch.PublishWithContext(ctx, ExchangeName, routingKey, false, false, amqp.Publishing{
+	if err := p.ch.PublishWithContext(ctx, ExchangeName, routingKey, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Body:         data,
-	})
+	}); err != nil {
+		metrics.MQPublishErrors.WithLabelValues(routingKey).Inc()
+		return err
+	}
+	return nil
 }
 
 // Close closes the channel and connection.

@@ -15,6 +15,7 @@ import (
 
 	"no-lights-monitor/cmd/bot/bot"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/metrics"
 	"no-lights-monitor/internal/models"
 	"no-lights-monitor/internal/mq"
 	"no-lights-monitor/internal/outage"
@@ -122,8 +123,10 @@ func (l *listener) handleBroadcast(payload []byte) {
 	if msg.ChannelID == 0 {
 		return
 	}
+	metrics.BotMessagesProcessed.WithLabelValues("broadcast").Inc()
 	chat := &tele.Chat{ID: msg.ChannelID}
 	if _, err := l.bot.Send(chat, msg.Text, &tele.SendOptions{ParseMode: tele.ModeHTML}); err != nil {
+		metrics.BotNotificationErrors.WithLabelValues("broadcast").Inc()
 		log.Printf("[listener] broadcast to channel %d failed: %v", msg.ChannelID, err)
 	}
 }
@@ -136,6 +139,7 @@ func (l *listener) handleDtekOutage(ctx context.Context, payload []byte) {
 		log.Printf("[listener] bad dtek_outage message: %v", err)
 		return
 	}
+	metrics.BotMessagesProcessed.WithLabelValues("dtek_outage").Inc()
 	switch msg.Action {
 	case mq.DtekOutageUpdate:
 		l.editDtekOutage(ctx, msg)
@@ -152,6 +156,7 @@ func (l *listener) sendDtekOutage(ctx context.Context, msg mq.DtekOutageMsg) {
 	chat := &tele.Chat{ID: msg.ChannelID}
 	sent, err := l.bot.Send(chat, text, &tele.SendOptions{ParseMode: tele.ModeHTML})
 	if err != nil {
+		metrics.BotNotificationErrors.WithLabelValues("dtek_outage").Inc()
 		log.Printf("[listener] dtek monitor %d: failed to send to channel: %v", msg.MonitorID, err)
 		return
 	}
@@ -173,6 +178,7 @@ func (l *listener) editDtekOutage(ctx context.Context, msg mq.DtekOutageMsg) {
 		if strings.Contains(err.Error(), "message is not modified") {
 			return
 		}
+		metrics.BotNotificationErrors.WithLabelValues("dtek_outage").Inc()
 		log.Printf("[listener] dtek monitor %d: failed to edit msg %d: %v", msg.MonitorID, msg.OldMsgID, err)
 	} else {
 		log.Printf("[listener] dtek monitor %d: updated (msg %d)", msg.MonitorID, msg.OldMsgID)
@@ -197,6 +203,7 @@ func (l *listener) handleInactivePause(payload []byte) {
 		log.Printf("[listener] bad inactive_pause message: %v", err)
 		return
 	}
+	metrics.BotMessagesProcessed.WithLabelValues("inactive_pause").Inc()
 	l.notifier.NotifyInactivePause(msg.MonitorID, msg.ChannelID, msg.OwnerTelegramID, msg.MonitorName)
 }
 
@@ -208,6 +215,7 @@ func (l *listener) handleStatusChange(payload []byte) {
 		log.Printf("[listener] bad status_change message: %v", err)
 		return
 	}
+	metrics.BotMessagesProcessed.WithLabelValues("status_change").Inc()
 	duration := time.Duration(msg.DurationSec * float64(time.Second))
 	l.notifier.NotifyStatusChange(
 		msg.MonitorID, msg.ChannelID, msg.Name, msg.Address,
@@ -224,6 +232,7 @@ func (l *listener) handleGraphReady(ctx context.Context, payload []byte) {
 		log.Printf("[listener] bad graph_ready message: %v", err)
 		return
 	}
+	metrics.BotMessagesProcessed.WithLabelValues("graph").Inc()
 
 	chat := &tele.Chat{ID: msg.ChannelID}
 	silent := &tele.SendOptions{DisableNotification: bot.IsQuietHour()}
@@ -235,6 +244,7 @@ func (l *listener) handleGraphReady(ctx context.Context, payload []byte) {
 		}
 		sent, err := l.bot.Send(chat, photo, silent)
 		if err != nil {
+			metrics.BotNotificationErrors.WithLabelValues("graph").Inc()
 			l.handleChannelError(ctx, msg.MonitorID, msg.MonitorName, err)
 			return
 		}
@@ -253,6 +263,7 @@ func (l *listener) handleGraphReady(ctx context.Context, payload []byte) {
 			if strings.Contains(err.Error(), "message is not modified") {
 				return
 			}
+			metrics.BotNotificationErrors.WithLabelValues("graph").Inc()
 			if l.handleChannelError(ctx, msg.MonitorID, msg.MonitorName, err) {
 				return
 			}
@@ -272,6 +283,7 @@ func (l *listener) handleOutagePhoto(ctx context.Context, payload []byte) {
 		log.Printf("[listener] bad outage_photo message: %v", err)
 		return
 	}
+	metrics.BotMessagesProcessed.WithLabelValues("outage_photo").Inc()
 
 	switch msg.Action {
 	case mq.OutagePhotoDelete:
@@ -294,6 +306,7 @@ func (l *listener) deletePhoto(msg mq.OutagePhotoMsg) {
 		Chat: &tele.Chat{ID: msg.ChannelID},
 	}
 	if err := l.bot.Delete(delMsg); err != nil {
+		metrics.BotNotificationErrors.WithLabelValues("outage_photo").Inc()
 		log.Printf("[listener] outage_photo monitor %d: failed to delete (msg %d): %v", msg.MonitorID, msg.OldMsgID, err)
 	}
 }
@@ -314,6 +327,7 @@ func (l *listener) editPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 			}
 			return
 		}
+		metrics.BotNotificationErrors.WithLabelValues("outage_photo").Inc()
 		if l.handleChannelError(ctx, msg.MonitorID, msg.MonitorName, err) {
 			return
 		}
@@ -342,6 +356,7 @@ func (l *listener) sendPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 
 	sent, err := l.bot.Send(chat, photo, sendOpts)
 	if err != nil {
+		metrics.BotNotificationErrors.WithLabelValues("outage_photo").Inc()
 		l.handleChannelError(ctx, msg.MonitorID, msg.MonitorName, err)
 		return
 	}

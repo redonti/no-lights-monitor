@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -19,6 +21,7 @@ import (
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
 	"no-lights-monitor/internal/health"
+	"no-lights-monitor/internal/metrics"
 	"no-lights-monitor/internal/mq"
 )
 
@@ -95,6 +98,21 @@ func main() {
 		Format: "${time} ${status} ${method} ${path} ${latency}\n",
 	}))
 	app.Use(cors.New())
+
+	// Record latency for /api/* routes only (avoids cardinality from static file paths).
+	app.Use(func(c *fiber.Ctx) error {
+		if len(c.Path()) < 5 || c.Path()[:5] != "/api/" {
+			return c.Next()
+		}
+		start := time.Now()
+		err := c.Next()
+		route := c.Route().Path
+		if route == "" {
+			route = "unknown"
+		}
+		metrics.APIRequestDuration.WithLabelValues(route, strconv.Itoa(c.Response().StatusCode())).Observe(time.Since(start).Seconds())
+		return err
+	})
 
 	// Health checks (before all other routes so they're never shadowed)
 	app.Get("/healthz", func(c *fiber.Ctx) error {

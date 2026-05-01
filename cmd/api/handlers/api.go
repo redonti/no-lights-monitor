@@ -20,11 +20,16 @@ type Handlers struct {
 
 	OutageServiceURL string // URL of the outage data service (for proxying)
 	DtekServiceURL   string // URL of the DTEK scraper service (for proxying)
+	MQPublisher      mqPublisher
 
 	// In-memory response cache for /api/monitors.
 	monitorCache   []byte
 	monitorCacheAt time.Time
 	monitorCacheMu sync.RWMutex
+}
+
+type mqPublisher interface {
+	Publish(ctx context.Context, routingKey string, msg any) error
 }
 
 const (

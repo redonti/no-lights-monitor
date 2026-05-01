@@ -41,6 +41,24 @@
         </div>
       </div>
 
+      <!-- Broadcast -->
+      <div class="mb-10">
+        <h2 class="text-lg font-semibold mb-3">Broadcast</h2>
+        <div class="bg-white border border-stone-200 rounded-xl px-5 py-4 max-w-lg">
+          <p class="text-stone-400 text-xs mb-3">Send a message to all active monitors' Telegram channels. Supports HTML formatting.</p>
+          <textarea id="broadcast-text" rows="4"
+            class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-stone-300"
+            placeholder="Enter message text..."></textarea>
+          <div class="flex items-center gap-3 mt-3">
+            <button onclick="sendBroadcast()"
+              class="px-4 py-2 bg-stone-800 text-white text-sm font-medium rounded-lg hover:bg-stone-700 transition-colors">
+              Send
+            </button>
+            <span id="broadcast-status" class="text-sm text-stone-400"></span>
+          </div>
+        </div>
+      </div>
+
       <!-- Monitors -->
       <div class="mb-10">
         <h2 class="text-lg font-semibold mb-3">Monitors <span id="monitors-count" class="text-stone-400 font-normal text-sm"></span></h2>
@@ -238,6 +256,26 @@
         setDevModeUI(next);
       } catch (e) {
         alert('Failed to update dev mode');
+      }
+    }
+
+    async function sendBroadcast() {
+      const text = document.getElementById('broadcast-text').value.trim();
+      const status = document.getElementById('broadcast-status');
+      if (!text) { status.textContent = 'Enter a message first.'; return; }
+      status.textContent = 'Sending...';
+      try {
+        const res = await fetch('/admin/api/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'error');
+        status.textContent = `Sent to ${data.channels} channel(s).`;
+        document.getElementById('broadcast-text').value = '';
+      } catch (e) {
+        status.textContent = 'Failed: ' + e.message;
       }
     }
 

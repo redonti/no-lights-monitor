@@ -14,12 +14,13 @@ import (
 const (
 	ExchangeName = "nlm"
 
-	RoutingStatusChange = "status.change"
-	RoutingGraphReady   = "graph.ready"
-	RoutingOutagePhoto  = "outage.photo"
-	RoutingGraphRequest = "graph.request"
+	RoutingStatusChange  = "status.change"
+	RoutingGraphReady    = "graph.ready"
+	RoutingOutagePhoto   = "outage.photo"
+	RoutingGraphRequest  = "graph.request"
 	RoutingDtekOutage    = "dtek.outage"
 	RoutingInactivePause = "inactive.pause"
+	RoutingBroadcast     = "broadcast.message"
 
 	QueueStatusChange  = "nlm.status_change"
 	QueueGraphReady    = "nlm.graph_ready"
@@ -27,6 +28,7 @@ const (
 	QueueGraphRequest  = "nlm.graph_request"
 	QueueDtekOutage    = "nlm.dtek_outage"
 	QueueInactivePause = "nlm.inactive_pause"
+	QueueBroadcast     = "nlm.broadcast"
 )
 
 // ── Message types ────────────────────────────────────────────────────
@@ -119,6 +121,12 @@ type InactivePauseMsg struct {
 	MonitorName     string `json:"monitor_name"`
 }
 
+// BroadcastMsg is published by the admin API to send a message to a Telegram channel.
+type BroadcastMsg struct {
+	ChannelID int64  `json:"channel_id"`
+	Text      string `json:"text"`
+}
+
 // ── Topology setup ───────────────────────────────────────────────────
 
 // queues maps queue names to their routing keys.
@@ -129,6 +137,7 @@ var queues = map[string]string{
 	QueueGraphRequest:  RoutingGraphRequest,
 	QueueDtekOutage:    RoutingDtekOutage,
 	QueueInactivePause: RoutingInactivePause,
+	QueueBroadcast:     RoutingBroadcast,
 }
 
 // SetupTopology declares the exchange, all queues, and bindings.

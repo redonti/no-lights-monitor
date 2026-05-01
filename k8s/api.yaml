@@ -67,6 +67,18 @@ spec:
                 secretKeyRef:
                   name: nolights-secret
                   key: TELEGRAM_CHAT_USERNAME
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: nolights-secret
+                  key: RABBITMQ_PASS
+            - name: RABBITMQ_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASS)@rabbitmq:5672/
             - name: OUTAGE_SERVICE_URL
               value: http://outage:8090
             - name: DTEK_SERVICE_URL

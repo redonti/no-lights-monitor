@@ -18,6 +18,7 @@ import (
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/mq"
 )
 
 func main() {
@@ -67,6 +68,14 @@ func main() {
 	defer redisCache.Close()
 	log.Println("redis connected")
 
+	// --- RabbitMQ ---
+	mqPub, err := mq.NewPublisher(cfg.RabbitMQURL)
+	if err != nil {
+		log.Fatalf("rabbitmq: %v", err)
+	}
+	defer mqPub.Close()
+	log.Println("rabbitmq connected")
+
 	// --- Fiber HTTP Server ---
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
@@ -79,7 +88,7 @@ func main() {
 	app.Use(cors.New())
 
 	// API routes
-	h := &handlers.Handlers{DB: db, Cache: redisCache, OutageServiceURL: cfg.OutageServiceURL, DtekServiceURL: cfg.DtekServiceURL}
+	h := &handlers.Handlers{DB: db, Cache: redisCache, OutageServiceURL: cfg.OutageServiceURL, DtekServiceURL: cfg.DtekServiceURL, MQPublisher: mqPub}
 	api := app.Group("/api")
 	api.Get("/ping/:token", h.PingAPI)
 	api.Get("/monitors", h.GetMonitors)
@@ -107,6 +116,7 @@ func main() {
 		admin.Get("/api/monitors", h.AdminGetMonitors)
 		admin.Get("/api/monitors/deleted", h.AdminGetDeletedMonitors)
 		admin.Get("/api/monitors/:id/history", h.GetHistory)
+		admin.Post("/api/broadcast", h.AdminBroadcast)
 	}
 
 	// Settings page (serve settings.html for any /settings/* path).

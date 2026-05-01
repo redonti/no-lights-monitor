@@ -59,8 +59,12 @@ func (l *listener) start(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("[listener] failed to consume %s: %v", mq.QueueInactivePause, err)
 	}
+	broadcastCh, err := l.consumer.Consume(mq.QueueBroadcast)
+	if err != nil {
+		log.Fatalf("[listener] failed to consume %s: %v", mq.QueueBroadcast, err)
+	}
 
-	log.Println("[listener] consuming from status_change, graph_ready, outage_photo, dtek_outage, inactive_pause")
+	log.Println("[listener] consuming from status_change, graph_ready, outage_photo, dtek_outage, inactive_pause, broadcast")
 
 	for {
 		select {
@@ -97,7 +101,30 @@ func (l *listener) start(ctx context.Context) {
 			}
 			l.handleInactivePause(d.Body)
 			d.Ack(false)
+		case d, ok := <-broadcastCh:
+			if !ok {
+				return
+			}
+			l.handleBroadcast(d.Body)
+			d.Ack(false)
 		}
+	}
+}
+
+// ── Broadcast handler ────────────────────────────────────────────────
+
+func (l *listener) handleBroadcast(payload []byte) {
+	var msg mq.BroadcastMsg
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		log.Printf("[listener] bad broadcast message: %v", err)
+		return
+	}
+	if msg.ChannelID == 0 {
+		return
+	}
+	chat := &tele.Chat{ID: msg.ChannelID}
+	if _, err := l.bot.Send(chat, msg.Text, &tele.SendOptions{ParseMode: tele.ModeHTML}); err != nil {
+		log.Printf("[listener] broadcast to channel %d failed: %v", msg.ChannelID, err)
 	}
 }
 

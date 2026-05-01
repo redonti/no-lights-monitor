@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+
+	"no-lights-monitor/internal/mq"
 )
 
 // AdminGetSettings returns global app settings.
@@ -98,4 +100,38 @@ func (h *Handlers) AdminGetDeletedMonitors(c *fiber.Ctx) error {
 		return c.JSON([]struct{}{})
 	}
 	return c.JSON(monitors)
+}
+
+// AdminBroadcast sends a text message to all active monitors' Telegram channels.
+func (h *Handlers) AdminBroadcast(c *fiber.Ctx) error {
+	var req struct {
+		Text string `json:"text"`
+	}
+	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "text is required"})
+	}
+
+	ctx := context.Background()
+	monitors, err := h.DB.GetMonitorsWithChannels(ctx)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load monitors"})
+	}
+
+	seen := make(map[int64]struct{})
+	var count int
+	for _, m := range monitors {
+		if _, ok := seen[m.ChannelID]; ok {
+			continue
+		}
+		seen[m.ChannelID] = struct{}{}
+		if err := h.MQPublisher.Publish(ctx, mq.RoutingBroadcast, mq.BroadcastMsg{
+			ChannelID: m.ChannelID,
+			Text:      req.Text,
+		}); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to publish"})
+		}
+		count++
+	}
+
+	return c.JSON(fiber.Map{"channels": count})
 }

@@ -13,6 +13,7 @@ import (
 	"no-lights-monitor/cmd/bot/channeldesc"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/health"
 	"no-lights-monitor/internal/mq"
 	"no-lights-monitor/internal/outage"
 	"no-lights-monitor/internal/ping"
@@ -55,6 +56,11 @@ func main() {
 	}
 	defer mqConsumer.Close()
 	log.Println("rabbitmq connected")
+
+	// --- Health server ---
+	health.ServeAsync(func() error {
+		return db.Pool.Ping(ctx)
+	})
 
 	// --- Telegram Bot ---
 	tgBot, err := bot.New(cfg.BotToken, db, ping.PingHost, cfg.BaseURL, cfg.TelegramChatUsername)

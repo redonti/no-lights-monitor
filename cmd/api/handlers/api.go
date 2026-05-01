@@ -11,6 +11,7 @@ import (
 
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/metrics"
 	"no-lights-monitor/internal/models"
 )
 
@@ -57,11 +58,13 @@ func (h *Handlers) PingAPI(c *fiber.Ctx) error {
 	// Validate token by looking up monitor in database.
 	monitor, err := h.DB.GetMonitorByToken(ctx, token)
 	if err != nil {
+		metrics.PingTotal.WithLabelValues("not_found").Inc()
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "unknown token"})
 	}
 
 	// Skip if monitoring is paused.
 	if !monitor.IsActive {
+		metrics.PingTotal.WithLabelValues("paused").Inc()
 		return c.JSON(fiber.Map{"status": "paused"})
 	}
 
@@ -82,6 +85,7 @@ func (h *Handlers) PingAPI(c *fiber.Ctx) error {
 		}
 	}()
 
+	metrics.PingTotal.WithLabelValues("ok").Inc()
 	return c.JSON(fiber.Map{"status": "ok"})
 }
 

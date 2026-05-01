@@ -11,6 +11,7 @@ import (
 
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/metrics"
 	"no-lights-monitor/internal/models"
 	"no-lights-monitor/internal/ping"
 )
@@ -493,8 +494,10 @@ func (s *Service) checkAndTransition(ctx context.Context, info *monitorInfo, mon
 		}
 
 		if isNowOnline {
+			metrics.StatusChangeTotal.WithLabelValues("online").Inc()
 			log.Printf("[heartbeat] monitor %d (%s) is now ONLINE (was off for %s)", monitorID, monitorName, database.FormatDuration(duration))
 		} else {
+			metrics.StatusChangeTotal.WithLabelValues("offline").Inc()
 			log.Printf("[heartbeat] monitor %d (%s) is now OFFLINE (was on for %s)", monitorID, monitorName, database.FormatDuration(duration))
 		}
 	}

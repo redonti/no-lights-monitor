@@ -18,6 +18,7 @@ import (
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/health"
 	"no-lights-monitor/internal/mq"
 )
 
@@ -68,6 +69,14 @@ func main() {
 	defer redisCache.Close()
 	log.Println("redis connected")
 
+	// --- Health + metrics server on :8081 (not exposed through ingress) ---
+	health.ServeAsync(func() error {
+		if err := db.Pool.Ping(context.Background()); err != nil {
+			return err
+		}
+		return redisCache.Client.Ping(context.Background()).Err()
+	})
+
 	// --- RabbitMQ ---
 	mqPub, err := mq.NewPublisher(cfg.RabbitMQURL)
 	if err != nil {
@@ -86,6 +95,20 @@ func main() {
 		Format: "${time} ${status} ${method} ${path} ${latency}\n",
 	}))
 	app.Use(cors.New())
+
+	// Health checks (before all other routes so they're never shadowed)
+	app.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+	app.Get("/readyz", func(c *fiber.Ctx) error {
+		if err := db.Pool.Ping(context.Background()); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "db"})
+		}
+		if err := redisCache.Client.Ping(context.Background()).Err(); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "redis"})
+		}
+		return c.SendStatus(fiber.StatusOK)
+	})
 
 	// API routes
 	h := &handlers.Handlers{DB: db, Cache: redisCache, OutageServiceURL: cfg.OutageServiceURL, DtekServiceURL: cfg.DtekServiceURL, MQPublisher: mqPub}

@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: nolights
+  namespace: nolights
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - nolights
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [api, worker, bot]
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

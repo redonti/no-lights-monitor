@@ -12,6 +12,7 @@ import (
 	"no-lights-monitor/internal/cache"
 	"no-lights-monitor/internal/config"
 	"no-lights-monitor/internal/database"
+	"no-lights-monitor/internal/health"
 	"no-lights-monitor/cmd/worker/dtek"
 	"no-lights-monitor/cmd/worker/graph"
 	"no-lights-monitor/cmd/worker/heartbeat"
@@ -70,6 +71,11 @@ func main() {
 	}
 	defer consumer.Close()
 	log.Println("rabbitmq connected")
+
+	// --- Health server ---
+	health.ServeAsync(func() error {
+		return db.Pool.Ping(ctx)
+	})
 
 	// --- Heartbeat Service ---
 	notifier := mq.NewStatusNotifier(publisher)

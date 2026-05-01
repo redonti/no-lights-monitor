@@ -22,6 +22,9 @@ spec:
           securityContext:
             capabilities:
               add: ["NET_RAW"]
+          ports:
+            - containerPort: 8081
+              name: metrics
           env:
             - name: TZ
               value: Europe/Kyiv
@@ -59,3 +62,17 @@ spec:
               value: "300"
             - name: DTEK_POLL_INTERVAL
               value: "900"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3

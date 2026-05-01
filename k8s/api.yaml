@@ -32,6 +32,8 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+            - containerPort: 8081
+              name: metrics
           env:
             - name: TZ
               value: Europe/Kyiv
@@ -83,9 +85,17 @@ spec:
               value: http://outage:8090
             - name: DTEK_SERVICE_URL
               value: http://dtek:3000
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /
+              path: /readyz
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
+            failureThreshold: 3

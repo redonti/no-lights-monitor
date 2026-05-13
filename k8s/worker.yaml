@@ -17,7 +17,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: worker
-          image: ghcr.io/redonti/no-lights-monitor/worker:sha-fb798472e6594597beceb9ae9624815fb7ad4c2b
+          image: ghcr.io/redonti/no-lights-monitor/worker:sha-2f5293260a9d68d2250e0dbb72e30f791a8a72f7
           imagePullPolicy: Always
           securityContext:
             capabilities:

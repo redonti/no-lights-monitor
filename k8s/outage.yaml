@@ -28,7 +28,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: outage
-          image: ghcr.io/redonti/no-lights-monitor/outage:sha-fb798472e6594597beceb9ae9624815fb7ad4c2b
+          image: ghcr.io/redonti/no-lights-monitor/outage:sha-2f5293260a9d68d2250e0dbb72e30f791a8a72f7
           imagePullPolicy: Always
           ports:
             - containerPort: 8090

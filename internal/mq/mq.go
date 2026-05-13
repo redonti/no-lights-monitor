@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -163,8 +164,10 @@ func SetupTopology(ch *amqp.Channel) error {
 
 // Publisher publishes messages to the RabbitMQ exchange.
 type Publisher struct {
+	url  string
 	conn *amqp.Connection
 	ch   *amqp.Channel
+	mu   sync.Mutex
 }
 
 // NewPublisher connects to RabbitMQ, sets up topology, and returns a Publisher.
@@ -183,28 +186,75 @@ func NewPublisher(url string) (*Publisher, error) {
 		conn.Close()
 		return nil, err
 	}
-	return &Publisher{conn: conn, ch: ch}, nil
+	return &Publisher{url: url, conn: conn, ch: ch}, nil
 }
 
 // Publish serializes msg to JSON and publishes it with the given routing key.
+// On failure it attempts to reconnect once before giving up.
 func (p *Publisher) Publish(ctx context.Context, routingKey string, msg any) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal message: %w", err)
 	}
-	if err := p.ch.PublishWithContext(ctx, ExchangeName, routingKey, false, false, amqp.Publishing{
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if err := p.publishLocked(ctx, routingKey, data); err != nil {
+		log.Printf("[mq] publish failed, reconnecting: %v", err)
+		if reconnErr := p.reconnectLocked(); reconnErr != nil {
+			metrics.MQPublishErrors.WithLabelValues(routingKey).Inc()
+			return fmt.Errorf("publish: %w (reconnect: %v)", err, reconnErr)
+		}
+		if err := p.publishLocked(ctx, routingKey, data); err != nil {
+			metrics.MQPublishErrors.WithLabelValues(routingKey).Inc()
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Publisher) publishLocked(ctx context.Context, routingKey string, data []byte) error {
+	return p.ch.PublishWithContext(ctx, ExchangeName, routingKey, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Body:         data,
-	}); err != nil {
-		metrics.MQPublishErrors.WithLabelValues(routingKey).Inc()
+	})
+}
+
+func (p *Publisher) reconnectLocked() error {
+	if p.ch != nil {
+		p.ch.Close()
+		p.ch = nil
+	}
+	if p.conn != nil {
+		p.conn.Close()
+		p.conn = nil
+	}
+	conn, err := dialWithRetry(p.url)
+	if err != nil {
 		return err
 	}
+	ch, err := conn.Channel()
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("open channel: %w", err)
+	}
+	if err := SetupTopology(ch); err != nil {
+		ch.Close()
+		conn.Close()
+		return err
+	}
+	p.conn = conn
+	p.ch = ch
+	log.Println("[mq] publisher reconnected to RabbitMQ")
 	return nil
 }
 
 // Close closes the channel and connection.
 func (p *Publisher) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.ch != nil {
 		p.ch.Close()
 	}

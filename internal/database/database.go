@@ -406,6 +406,13 @@ func (db *DB) ClearOutagePhoto(ctx context.Context, monitorID int64) error {
 	return err
 }
 
+// GetOutagePhotoMessageID returns the current outage_photo_message_id for a monitor.
+func (db *DB) GetOutagePhotoMessageID(ctx context.Context, monitorID int64) (int, error) {
+	var id int
+	err := db.Pool.QueryRow(ctx, `SELECT outage_photo_message_id FROM monitors WHERE id = $1`, monitorID).Scan(&id)
+	return id, err
+}
+
 // GetAllDeletedMonitors returns every soft-deleted monitor ordered by deletion time.
 func (db *DB) GetAllDeletedMonitors(ctx context.Context) ([]*models.Monitor, error) {
 	rows, err := db.Pool.Query(ctx, `

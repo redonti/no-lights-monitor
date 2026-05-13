@@ -73,6 +73,7 @@
                 <th class="text-left px-4 py-2.5">Address</th>
                 <th class="text-left px-4 py-2.5">Ping target</th>
                 <th class="text-center px-4 py-2.5">Status</th>
+                <th class="text-right px-4 py-2.5">Status since</th>
                 <th class="text-center px-4 py-2.5">Active</th>
                 <th class="text-center px-4 py-2.5">Public</th>
                 <th class="text-center px-4 py-2.5">Type</th>
@@ -157,6 +158,7 @@
               <span class="inline-block w-2 h-2 rounded-full mr-1.5 ${m.is_online ? 'bg-green-500' : 'bg-red-500'}"></span>
               ${m.is_online ? 'Online' : 'Offline'}
             </td>
+            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(m.last_status_change_at)}</td>
             <td class="px-4 py-2.5 text-center ${m.is_active ? 'text-stone-900' : 'text-stone-400'}">${m.is_active ? 'Yes' : 'Paused'}</td>
             <td class="px-4 py-2.5 text-center ${m.is_public ? 'text-stone-900' : 'text-stone-400'}">${m.is_public ? 'Yes' : 'No'}</td>
             <td class="px-4 py-2.5 text-center text-stone-500">${m.monitor_type}</td>

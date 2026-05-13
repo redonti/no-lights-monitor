@@ -345,6 +345,15 @@ func (l *listener) editPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
 }
 
 func (l *listener) sendPhoto(ctx context.Context, msg mq.OutagePhotoMsg) {
+	// Guard against duplicate sends (e.g. worker restarted while a pending send was already queued).
+	// If the DB already has a photo for this monitor, treat it as an edit instead.
+	if existingID, err := l.db.GetOutagePhotoMessageID(ctx, msg.MonitorID); err == nil && existingID != 0 {
+		log.Printf("[listener] outage_photo monitor %d: photo already exists (msg %d), converting send→edit", msg.MonitorID, existingID)
+		msg.OldMsgID = existingID
+		l.editPhoto(ctx, msg)
+		return
+	}
+
 	chat := &tele.Chat{ID: msg.ChannelID}
 	quiet := bot.IsQuietHour()
 	log.Printf("[listener] outage_photo monitor %d: sendPhoto quiet=%v", msg.MonitorID, quiet)

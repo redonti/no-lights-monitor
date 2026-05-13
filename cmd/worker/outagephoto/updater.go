@@ -147,11 +147,15 @@ func (u *Updater) updateOne(ctx context.Context, m *models.Monitor) error {
 
 	// If the toggle is enabled and there are no outages scheduled today, skip posting a new photo.
 	if m.OutagePhotoMessageID == 0 && m.SkipOutagePhotoIfNoOutages {
-		if fact, err := u.outage.GetGroupFact(m.OutageRegion, m.OutageGroup); err == nil {
-			if allLightsOn(fact.Hours) {
-				log.Printf("[outage-photo] monitor %d: no outages today, skipping photo", m.ID)
-				return nil
-			}
+		fact, err := u.outage.GetGroupFact(m.OutageRegion, m.OutageGroup)
+		if err != nil {
+			// Fail-safe: can't determine today's schedule, don't send.
+			log.Printf("[outage-photo] monitor %d: skipping photo (schedule check failed: %v)", m.ID, err)
+			return nil
+		}
+		if allLightsOn(fact.Hours) {
+			log.Printf("[outage-photo] monitor %d: no outages today, skipping photo", m.ID)
+			return nil
 		}
 	}
 

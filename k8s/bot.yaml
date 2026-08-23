@@ -17,7 +17,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: bot
-          image: ghcr.io/redonti/no-lights-monitor/bot:sha-85ce0c0f9c95a22e1bb2f5c6d256a391d1f1d699
+          image: ghcr.io/redonti/no-lights-monitor/bot:sha-e0e90503604c68ebb71074a8c49fe5281de7cdef
           imagePullPolicy: Always
           securityContext:
             capabilities:

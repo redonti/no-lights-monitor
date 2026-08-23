@@ -1,6 +1,8 @@
 package outage
 
 import (
+	"bytes"
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -33,9 +35,35 @@ type Preset struct {
 type Fact struct {
 	// Data is keyed by unix timestamp string, then group ID, then hour (1-24).
 	// Values: "yes" (power on), "no" (power off), "first" (off first 30min), "second" (off second 30min).
+	// Never nil after unmarshalling; empty when the source reports no outages.
 	Data   map[string]map[string]map[string]string `json:"data"`
 	Update string                                   `json:"update"`
 	Today  int64                                    `json:"today"`
+}
+
+// UnmarshalJSON decodes a Fact, tolerating the two shapes the source uses for
+// "data": an object keyed by unix timestamp when outages exist, and an empty
+// JSON array when there are none. The array form is decoded as an empty map so
+// a quiet day does not fail the whole region.
+func (f *Fact) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Data   json.RawMessage `json:"data"`
+		Update string          `json:"update"`
+		Today  int64           `json:"today"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+
+	f.Update = raw.Update
+	f.Today = raw.Today
+	f.Data = make(map[string]map[string]map[string]string)
+
+	trimmed := bytes.TrimSpace(raw.Data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] == '[' {
+		return nil
+	}
+	return json.Unmarshal(trimmed, &f.Data)
 }
 
 // GroupHourlyFact is the API response for a group's hourly fact status.

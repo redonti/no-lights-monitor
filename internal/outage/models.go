@@ -26,9 +26,42 @@ type RegionData struct {
 	Preset      Preset `json:"preset"`
 }
 
-// Preset contains the weekly schedule metadata (we only use sch_names for display names).
+// Preset contains the weekly schedule metadata. Only the display names and the
+// group keys of Data are used: preset describes *possible* outages, so its
+// hourly values are deliberately ignored — actual schedules come from Fact.
 type Preset struct {
 	SchNames map[string]string `json:"sch_names"`
+	// Data is keyed by group ID. Values are left undecoded on purpose; the
+	// group IDs form the catalogue offered when picking an outage group.
+	Data map[string]json.RawMessage `json:"data"`
+}
+
+// UnmarshalJSON decodes a Preset, tolerating the same empty-array form for
+// "data" that Fact handles.
+func (p *Preset) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		SchNames map[string]string `json:"sch_names"`
+		Data     json.RawMessage   `json:"data"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+
+	p.SchNames = raw.SchNames
+	p.Data = make(map[string]json.RawMessage)
+	return decodeObjectOrEmpty(raw.Data, &p.Data)
+}
+
+// decodeObjectOrEmpty unmarshals raw into v, treating an empty JSON array,
+// null or an absent value as "nothing to report" and leaving v untouched.
+// The upstream source emits [] where an object is expected whenever it has no
+// data, so accepting only an object would fail the whole region on quiet days.
+func decodeObjectOrEmpty(raw json.RawMessage, v any) error {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] == '[' {
+		return nil
+	}
+	return json.Unmarshal(trimmed, v)
 }
 
 // Fact contains actual/emergency outage data for today.
@@ -43,8 +76,7 @@ type Fact struct {
 
 // UnmarshalJSON decodes a Fact, tolerating the two shapes the source uses for
 // "data": an object keyed by unix timestamp when outages exist, and an empty
-// JSON array when there are none. The array form is decoded as an empty map so
-// a quiet day does not fail the whole region.
+// JSON array when there are none.
 func (f *Fact) UnmarshalJSON(b []byte) error {
 	var raw struct {
 		Data   json.RawMessage `json:"data"`
@@ -59,11 +91,7 @@ func (f *Fact) UnmarshalJSON(b []byte) error {
 	f.Today = raw.Today
 	f.Data = make(map[string]map[string]map[string]string)
 
-	trimmed := bytes.TrimSpace(raw.Data)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] == '[' {
-		return nil
-	}
-	return json.Unmarshal(trimmed, &f.Data)
+	return decodeObjectOrEmpty(raw.Data, &f.Data)
 }
 
 // GroupHourlyFact is the API response for a group's hourly fact status.

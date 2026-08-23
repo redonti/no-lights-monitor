@@ -43,16 +43,17 @@ func (h *handlers) getGroups(c *fiber.Ctx) error {
 		})
 	}
 
-	todayKey := strconv.FormatInt(rd.Fact.Today, 10)
-	dayData, ok := rd.Fact.Data[todayKey]
-	if !ok {
+	// The catalogue comes from the preset, not from today's fact: fact is empty
+	// whenever no outages are scheduled, and the group list must stay available
+	// so users can still configure a monitor on a quiet day.
+	if len(rd.Preset.Data) == 0 {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "no fact data for today",
+			"error": "no groups available",
 		})
 	}
 
-	groups := make([]outage.GroupInfo, 0, len(dayData))
-	for g := range dayData {
+	groups := make([]outage.GroupInfo, 0, len(rd.Preset.Data))
+	for g := range rd.Preset.Data {
 		name := g
 		if n, ok := rd.Preset.SchNames[g]; ok {
 			name = n

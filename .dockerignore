@@ -7,3 +7,13 @@ bin/
 *.md
 Makefile
 docker-compose.yml
+docker-compose.override.yml*
+
+# Not needed for the Go build context (root ".") — k8s/ in particular gets
+# rewritten by CI's own deploy commit on every run, which would otherwise
+# bust the `COPY . .` layer cache on the next build for no reason.
+k8s/
+docs/
+test_local/
+graph-service/
+dtek-service/

@@ -51,20 +51,29 @@ jobs:
             dtek:
               - 'dtek-service/**'
 
+  # Builds one single-arch image per (service, arch) pair, each on a runner
+  # native to that architecture — no QEMU emulation. `merge` below joins the
+  # two per-arch images into the final multi-arch tags.
   build:
     needs: changes
     if: ${{ needs.changes.outputs.services != '[]' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
         service: ${{ fromJSON(needs.changes.outputs.services) }}
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
     steps:
       - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -97,14 +106,44 @@ jobs:
           context: ${{ steps.ctx.outputs.context }}
           file: ${{ steps.ctx.outputs.dockerfile }}
           push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}
+          platforms: ${{ matrix.platform }}
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}-${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.service }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-${{ matrix.arch }}
+          provenance: false
+          sbom: false
+
+  # Joins each service's amd64 + arm64 images (built above) into the final
+  # multi-arch `latest` and `sha-<sha>` tags — no rebuild, just a manifest push.
+  merge:
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest \
+            -t ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }} \
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}-amd64 \
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}-arm64
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [changes, build]
+    needs: [changes, merge]
     steps:
       - uses: actions/checkout@v4
         with:

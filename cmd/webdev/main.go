@@ -1,11 +1,18 @@
 // Command webdev is a local frontend dev server. It serves ./web straight from
-// disk (edits show up on refresh) and proxies /api/* to a remote backend, so
-// frontend changes can be tested against real data without running the stack.
+// disk (edits show up on refresh) and proxies /api/* and /admin/api/* to a
+// remote backend, so frontend changes — including the admin panel — can be
+// tested against real data without running the stack.
 //
 //	go run ./cmd/webdev                          # proxies to https://lights-monitor.com
 //	go run ./cmd/webdev -upstream http://localhost:8081 -addr :3001
 //
-// WARNING: write requests (settings PUT/POST/DELETE) go to the upstream too.
+// /admin.html itself is served from local disk (so admin panel edits show up
+// on refresh); only its data calls under /admin/api/* go to the upstream.
+// The upstream will challenge those with HTTP Basic Auth — your browser will
+// prompt for the real admin login/password the first time.
+//
+// WARNING: write requests (settings PUT/POST/DELETE, admin broadcasts, dev
+// mode toggle, etc.) go to the upstream too — they affect real production data.
 package main
 
 import (
@@ -65,6 +72,7 @@ func main() {
 	files := http.FileServer(http.Dir(*dir))
 	mux := http.NewServeMux()
 	mux.Handle("/api/", proxy)
+	mux.Handle("/admin/api/", proxy) // admin.html itself stays local; only its data calls go upstream
 	mux.HandleFunc("GET /settings/{token}", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(*dir, "settings.html"))
 	})
@@ -88,6 +96,6 @@ func main() {
 		mux.ServeHTTP(w, r)
 	})
 
-	log.Printf("serving %s on http://localhost%s, proxying /api/* to %s", *dir, *addr, target)
+	log.Printf("serving %s on http://localhost%s, proxying /api/* and /admin/api/* to %s", *dir, *addr, target)
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }

@@ -33,6 +33,7 @@ type Monitor struct {
 	SkipOutagePhotoIfNoOutages bool      `json:"skip_outage_photo_if_no_outages" db:"skip_outage_photo_if_no_outages"` // skip daily photo refresh when no outages are scheduled today
 	GraphEnabled       bool       `json:"graph_enabled" db:"graph_enabled"` // whether to post uptime graph to channel
 	LastHeartbeatAt    *time.Time `json:"last_heartbeat_at,omitempty" db:"last_heartbeat_at"`
+	LastPingHost       string     `json:"last_ping_host,omitempty" db:"last_ping_host"` // Host header of the most recent /api/ping/:token request (heartbeat monitors only) — lets us tell who's still on the old domain
 	LastStatusChangeAt time.Time  `json:"last_status_change_at" db:"last_status_change_at"`
 	GraphMessageID       int        `json:"graph_message_id" db:"graph_message_id"`
 	GraphWeekStart       *time.Time `json:"graph_week_start,omitempty" db:"graph_week_start"`

@@ -396,7 +396,7 @@ func (s *Service) checkPingMonitors(ctx context.Context) {
 				if err := s.cache.SetHeartbeat(ctx, monitorID, now); err != nil {
 					log.Printf("[heartbeat] redis set error for ping monitor %d: %v", monitorID, err)
 				}
-				if err := s.db.UpdateMonitorHeartbeat(ctx, monitorID, now); err != nil {
+				if err := s.db.UpdateMonitorHeartbeat(ctx, monitorID, now, ""); err != nil {
 					log.Printf("[heartbeat] db heartbeat update error for ping monitor %d: %v", monitorID, err)
 				}
 			}

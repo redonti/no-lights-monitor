@@ -20,7 +20,7 @@
   </header>
 
   <section class="pt-8 pb-14 max-sm:pt-6 max-sm:pb-9">
-    <div class="px-5 mx-auto max-w-[1400px]">
+    <div class="px-5 mx-auto max-w-[1900px]">
       <h1 class="text-2xl font-bold tracking-tight mb-5">Admin Panel</h1>
 
       <!-- Tabs -->
@@ -61,10 +61,11 @@
           <div class="bg-white border border-stone-200 rounded-xl px-5 py-4">
             <p class="text-stone-400 text-xs mb-3">Compose a message. Telegram HTML formatting is supported: <code class="bg-stone-100 px-1 rounded">&lt;b&gt;</code>, <code class="bg-stone-100 px-1 rounded">&lt;i&gt;</code>, <code class="bg-stone-100 px-1 rounded">&lt;code&gt;</code>, <code class="bg-stone-100 px-1 rounded">&lt;a href&gt;</code>.</p>
 
-            <textarea id="broadcast-text" rows="8"
+            <textarea id="broadcast-text" rows="14"
               oninput="renderPreview()"
-              class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-stone-300 font-mono"
+              class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-y min-h-[160px] focus:outline-none focus:ring-2 focus:ring-stone-300 font-mono"
               placeholder="Enter message text..."></textarea>
+            <p class="text-xs text-stone-300 mt-1">Drag the bottom-right corner to resize.</p>
 
             <div class="mt-4">
               <p class="text-xs font-medium text-stone-500 mb-2">Send to</p>
@@ -126,26 +127,27 @@
       <!-- Monitors tab -->
       <div id="tab-monitors" class="tab-panel hidden">
         <h2 class="text-lg font-semibold mb-3">Monitors <span id="monitors-count-2" class="text-stone-400 font-normal text-sm"></span></h2>
+
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3">
+          <label class="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer">
+            <input type="checkbox" id="monitors-hide-paused" onchange="onMonitorsControlsChange()" class="rounded border-stone-300">
+            Hide paused
+          </label>
+          <label class="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer">
+            <input type="checkbox" id="monitors-compact" onchange="onMonitorsControlsChange()" class="rounded border-stone-300">
+            Compact mode
+          </label>
+          <label class="flex items-center gap-1.5 text-sm text-amber-700 cursor-pointer">
+            <input type="checkbox" id="monitors-old-domain-only" onchange="onMonitorsControlsChange()" class="rounded border-stone-300">
+            Old domain only
+          </label>
+          <span id="monitors-visible-count" class="text-xs text-stone-400"></span>
+        </div>
+
         <div id="monitors-loading" class="text-stone-400 text-sm">Loading...</div>
         <div id="monitors-table" class="hidden overflow-x-auto">
           <table class="w-full text-sm bg-white border border-stone-200 rounded-xl overflow-hidden">
-            <thead class="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide">
-              <tr>
-                <th class="text-center px-4 py-2.5">ID</th>
-                <th class="text-center px-4 py-2.5">User ID</th>
-                <th class="text-left px-4 py-2.5">Name</th>
-                <th class="text-left px-4 py-2.5">Address</th>
-                <th class="text-left px-4 py-2.5">Ping target</th>
-                <th class="text-center px-4 py-2.5">Status</th>
-                <th class="text-right px-4 py-2.5">Status since</th>
-                <th class="text-center px-4 py-2.5">Active</th>
-                <th class="text-center px-4 py-2.5">Public</th>
-                <th class="text-center px-4 py-2.5">Type</th>
-                <th class="text-left px-4 py-2.5">Channel</th>
-                <th class="text-right px-4 py-2.5">Last heartbeat</th>
-                <th class="text-right px-4 py-2.5">Created</th>
-              </tr>
-            </thead>
+            <thead id="monitors-head" class="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide"></thead>
             <tbody id="monitors-body" class="divide-y divide-stone-100"></tbody>
           </table>
         </div>
@@ -234,34 +236,124 @@
     let monitorsData = [];
     let usersData = [];
 
+    // ── Monitors table ───────────────────────────────────────────────
+    function channelLink(name) {
+      if (!name) return '—';
+      return `<a href="https://t.me/${name}" target="_blank" class="text-blue-600 hover:underline">@${name}</a>`;
+    }
+
+    function formatUser(userId) {
+      const u = usersData.find(x => x.id === userId);
+      if (!u) return `#${userId}`;
+      const uname = u.username ? '@' + u.username : null;
+      if (uname && u.first_name) return `${uname} (${u.first_name})`;
+      return uname || u.first_name || `#${userId}`;
+    }
+
+    function statusCell(m) {
+      return `<span class="inline-block w-2 h-2 rounded-full mr-1.5 ${m.is_online ? 'bg-green-500' : 'bg-red-500'}"></span>${m.is_online ? 'Online' : 'Offline'}`;
+    }
+
+    // Domains device pings have come from, since the lights-monitor.com → .spatki.xyz
+    // migration. Only heartbeat monitors (ESP/phone) hit this — ping-type monitors are
+    // checked by IP from the worker and never touch last_ping_host.
+    const OLD_DOMAIN = 'lights-monitor.com';
+    const NEW_DOMAIN = 'lights-monitor.spatki.xyz';
+
+    function isOldDomain(m) {
+      return m.monitor_type === 'heartbeat' && m.last_ping_host === OLD_DOMAIN;
+    }
+
+    function domainCell(m) {
+      if (m.monitor_type !== 'heartbeat') return '<span class="text-stone-300">—</span>';
+      if (!m.last_ping_host) return '<span class="text-stone-300">never pinged</span>';
+      if (m.last_ping_host === OLD_DOMAIN) return `<span class="text-amber-700 font-medium">⚠ ${OLD_DOMAIN}</span>`;
+      if (m.last_ping_host === NEW_DOMAIN) return `<span class="text-stone-400">${NEW_DOMAIN}</span>`;
+      return `<span class="text-stone-400">${m.last_ping_host}</span>`; // unexpected host, e.g. a raw IP
+    }
+
+    const MONITORS_COLUMNS_FULL = [
+      { label: 'ID', align: 'text-center', cell: m => `<span class="text-stone-400">${m.id}</span> <a href="/settings/${m.settings_token}?pwd=${m.settings_password}">↗</a>` },
+      { label: 'User ID', align: 'text-center text-stone-400', cell: m => m.user_id },
+      { label: 'Name', align: 'font-medium', cell: m => m.name },
+      { label: 'Address', align: 'text-stone-500', cell: m => m.address },
+      { label: 'Ping target', align: 'text-stone-500', cell: m => m.ping_target || '—' },
+      { label: 'Status', align: 'text-center', cell: statusCell },
+      { label: 'Status since', align: 'text-right text-stone-400', cell: m => formatDate(m.last_status_change_at) },
+      { label: 'Active', align: 'text-center', cell: m => m.is_active ? 'Yes' : 'Paused', altClass: m => m.is_active ? 'text-stone-900' : 'text-stone-400' },
+      { label: 'Public', align: 'text-center', cell: m => m.is_public ? 'Yes' : 'No', altClass: m => m.is_public ? 'text-stone-900' : 'text-stone-400' },
+      { label: 'Type', align: 'text-center text-stone-500', cell: m => m.monitor_type },
+      { label: 'Channel', align: 'text-stone-500', cell: m => channelLink(m.channel_name) },
+      { label: 'Domain', align: 'text-left', cell: domainCell },
+      { label: 'Last heartbeat', align: 'text-right text-stone-400', cell: m => formatDate(m.last_heartbeat_at) },
+      { label: 'Created', align: 'text-right text-stone-400', cell: m => formatDate(m.created_at) },
+    ];
+
+    const MONITORS_COLUMNS_COMPACT = [
+      { label: 'Name', align: 'font-medium', cell: m => m.name },
+      { label: 'Address', align: 'text-stone-500', cell: m => m.address },
+      { label: 'User', align: 'text-stone-500', cell: m => formatUser(m.user_id) },
+      { label: 'Status', align: 'text-center', cell: statusCell },
+      { label: 'Type', align: 'text-center text-stone-500', cell: m => m.monitor_type },
+      { label: 'Channel', align: 'text-stone-500', cell: m => channelLink(m.channel_name) },
+      { label: 'Created', align: 'text-right text-stone-400', cell: m => formatDate(m.created_at) },
+    ];
+
+    function headerAlign(align) {
+      if (align.includes('text-right')) return 'text-right';
+      if (align.includes('text-center')) return 'text-center';
+      return 'text-left';
+    }
+
+    function renderMonitorsTable() {
+      const hidePaused = document.getElementById('monitors-hide-paused').checked;
+      const compact = document.getElementById('monitors-compact').checked;
+      const oldDomainOnly = document.getElementById('monitors-old-domain-only').checked;
+      const columns = compact ? MONITORS_COLUMNS_COMPACT : MONITORS_COLUMNS_FULL;
+      let rows = monitorsData;
+      if (hidePaused) rows = rows.filter(m => m.is_active);
+      if (oldDomainOnly) rows = rows.filter(isOldDomain);
+
+      document.getElementById('monitors-head').innerHTML = `
+        <tr>${columns.map(c => `<th class="${headerAlign(c.align)} px-4 py-2.5">${c.label}</th>`).join('')}</tr>
+      `;
+      document.getElementById('monitors-body').innerHTML = rows.map(m => `
+        <tr class="hover:bg-stone-50 ${!m.is_active ? 'opacity-40' : ''}">
+          ${columns.map(c => `<td class="px-4 py-2.5 ${c.align} ${c.altClass ? c.altClass(m) : ''}">${c.cell(m)}</td>`).join('')}
+        </tr>
+      `).join('');
+
+      document.getElementById('monitors-visible-count').textContent =
+        rows.length !== monitorsData.length ? `Showing ${rows.length} of ${monitorsData.length}` : '';
+    }
+
+    function onMonitorsControlsChange() {
+      try {
+        localStorage.setItem('admin_monitors_hide_paused', document.getElementById('monitors-hide-paused').checked);
+        localStorage.setItem('admin_monitors_compact', document.getElementById('monitors-compact').checked);
+        localStorage.setItem('admin_monitors_old_domain_only', document.getElementById('monitors-old-domain-only').checked);
+      } catch (e) {}
+      renderMonitorsTable();
+    }
+
+    function loadMonitorsControlsPrefs() {
+      try {
+        document.getElementById('monitors-hide-paused').checked = localStorage.getItem('admin_monitors_hide_paused') === 'true';
+        document.getElementById('monitors-compact').checked = localStorage.getItem('admin_monitors_compact') === 'true';
+        document.getElementById('monitors-old-domain-only').checked = localStorage.getItem('admin_monitors_old_domain_only') === 'true';
+      } catch (e) {}
+    }
+
     async function loadMonitors() {
       try {
         const res = await fetch('/admin/api/monitors');
         monitorsData = await res.json();
         const countLabel = `(${monitorsData.length})`;
         document.getElementById('monitors-count').textContent = countLabel;
-        document.getElementById('monitors-count-2').textContent = countLabel;
-        const tbody = document.getElementById('monitors-body');
-        tbody.innerHTML = monitorsData.map(m => `
-          <tr class="hover:bg-stone-50 ${!m.is_active ? 'opacity-40' : ''}">
-            <td class="px-4 py-2.5 text-center text-stone-400">${m.id} <a href="/settings/${m.settings_token}?pwd=${m.settings_password}">↗</a></td>
-            <td class="px-4 py-2.5 text-center text-stone-400">${m.user_id}</td>
-            <td class="px-4 py-2.5 font-medium">${m.name}</td>
-            <td class="px-4 py-2.5 text-stone-500">${m.address}</td>
-            <td class="px-4 py-2.5 text-stone-500">${m.ping_target || '—'}</td>
-            <td class="px-4 py-2.5 text-center">
-              <span class="inline-block w-2 h-2 rounded-full mr-1.5 ${m.is_online ? 'bg-green-500' : 'bg-red-500'}"></span>
-              ${m.is_online ? 'Online' : 'Offline'}
-            </td>
-            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(m.last_status_change_at)}</td>
-            <td class="px-4 py-2.5 text-center ${m.is_active ? 'text-stone-900' : 'text-stone-400'}">${m.is_active ? 'Yes' : 'Paused'}</td>
-            <td class="px-4 py-2.5 text-center ${m.is_public ? 'text-stone-900' : 'text-stone-400'}">${m.is_public ? 'Yes' : 'No'}</td>
-            <td class="px-4 py-2.5 text-center text-stone-500">${m.monitor_type}</td>
-            <td class="px-4 py-2.5 text-stone-500">${m.channel_name || '—'}</td>
-            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(m.last_heartbeat_at)}</td>
-            <td class="px-4 py-2.5 text-right text-stone-400">${formatDate(m.created_at)}</td>
-          </tr>
-        `).join('');
+        const oldDomainCount = monitorsData.filter(isOldDomain).length;
+        document.getElementById('monitors-count-2').textContent = countLabel +
+          (oldDomainCount ? ` — ${oldDomainCount} on old domain` : '');
+        renderMonitorsTable();
         document.getElementById('monitors-loading').classList.add('hidden');
         document.getElementById('monitors-table').classList.remove('hidden');
         updateAudienceHint();
@@ -290,6 +382,7 @@
         document.getElementById('users-loading').classList.add('hidden');
         document.getElementById('users-table').classList.remove('hidden');
         updateAudienceHint();
+        if (monitorsData.length) renderMonitorsTable(); // refresh compact-mode "User" column now names are available
       } catch (e) {
         document.getElementById('users-loading').textContent = 'Failed to load users.';
       }
@@ -451,6 +544,7 @@
     }
 
     loadTestChatID();
+    loadMonitorsControlsPrefs();
     loadSettings();
     loadMonitors();
     loadDeletedMonitors();

@@ -28,7 +28,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: api
-          image: ghcr.io/redonti/no-lights-monitor/api:sha-e0e90503604c68ebb71074a8c49fe5281de7cdef
+          image: ghcr.io/redonti/no-lights-monitor/api:sha-878fc5a4fbf8c804098139cb00696107ad65f137
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

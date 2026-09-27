@@ -19,12 +19,23 @@
     </div>
   </header>
 
-  <section class="pt-10 pb-14 max-sm:pt-8 max-sm:pb-9">
+  <section class="pt-8 pb-14 max-sm:pt-6 max-sm:pb-9">
     <div class="px-5 mx-auto max-w-[1400px]">
-      <h1 class="text-2xl font-bold tracking-tight mb-6">Admin Panel</h1>
+      <h1 class="text-2xl font-bold tracking-tight mb-5">Admin Panel</h1>
 
-      <!-- System Settings -->
-      <div class="mb-10">
+      <!-- Tabs -->
+      <div class="border-b border-stone-200 mb-8 overflow-x-auto">
+        <nav class="flex gap-1 min-w-max" id="tab-nav">
+          <button data-tab="system" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-stone-500 hover:text-stone-900 transition-colors">System</button>
+          <button data-tab="communication" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-stone-500 hover:text-stone-900 transition-colors">Communication</button>
+          <button data-tab="monitors" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-stone-500 hover:text-stone-900 transition-colors">Monitors <span id="monitors-count" class="text-stone-400"></span></button>
+          <button data-tab="deleted" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-stone-500 hover:text-stone-900 transition-colors">Deleted <span id="deleted-count" class="text-stone-400"></span></button>
+          <button data-tab="users" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-stone-500 hover:text-stone-900 transition-colors">Users <span id="users-count" class="text-stone-400"></span></button>
+        </nav>
+      </div>
+
+      <!-- System tab -->
+      <div id="tab-system" class="tab-panel hidden">
         <h2 class="text-lg font-semibold mb-3">System</h2>
         <div class="bg-white border border-stone-200 rounded-xl px-5 py-4 flex items-center justify-between gap-4 max-w-md">
           <div>
@@ -41,27 +52,80 @@
         </div>
       </div>
 
-      <!-- Broadcast -->
-      <div class="mb-10">
-        <h2 class="text-lg font-semibold mb-3">Broadcast</h2>
-        <div class="bg-white border border-stone-200 rounded-xl px-5 py-4 max-w-lg">
-          <p class="text-stone-400 text-xs mb-3">Send a message to all active monitors' Telegram channels. Supports HTML formatting.</p>
-          <textarea id="broadcast-text" rows="4"
-            class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-stone-300"
-            placeholder="Enter message text..."></textarea>
-          <div class="flex items-center gap-3 mt-3">
-            <button onclick="sendBroadcast()"
-              class="px-4 py-2 bg-stone-800 text-white text-sm font-medium rounded-lg hover:bg-stone-700 transition-colors">
-              Send
-            </button>
-            <span id="broadcast-status" class="text-sm text-stone-400"></span>
+      <!-- Communication tab -->
+      <div id="tab-communication" class="tab-panel hidden">
+        <h2 class="text-lg font-semibold mb-3">Communication</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+
+          <!-- Composer -->
+          <div class="bg-white border border-stone-200 rounded-xl px-5 py-4">
+            <p class="text-stone-400 text-xs mb-3">Compose a message. Telegram HTML formatting is supported: <code class="bg-stone-100 px-1 rounded">&lt;b&gt;</code>, <code class="bg-stone-100 px-1 rounded">&lt;i&gt;</code>, <code class="bg-stone-100 px-1 rounded">&lt;code&gt;</code>, <code class="bg-stone-100 px-1 rounded">&lt;a href&gt;</code>.</p>
+
+            <textarea id="broadcast-text" rows="8"
+              oninput="renderPreview()"
+              class="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-stone-300 font-mono"
+              placeholder="Enter message text..."></textarea>
+
+            <div class="mt-4">
+              <p class="text-xs font-medium text-stone-500 mb-2">Send to</p>
+              <div class="flex flex-col gap-2">
+                <label class="flex items-start gap-2.5 border border-stone-200 rounded-lg px-3 py-2.5 cursor-pointer has-[:checked]:border-stone-800 has-[:checked]:bg-stone-50 transition-colors">
+                  <input type="radio" name="broadcast-mode" value="channels" checked class="mt-0.5" onchange="updateAudienceHint()">
+                  <span>
+                    <span class="block text-sm font-medium">Channels</span>
+                    <span class="block text-xs text-stone-400">Posts once to each active monitor's Telegram channel<span id="hint-channels"></span></span>
+                  </span>
+                </label>
+                <label class="flex items-start gap-2.5 border border-stone-200 rounded-lg px-3 py-2.5 cursor-pointer has-[:checked]:border-stone-800 has-[:checked]:bg-stone-50 transition-colors">
+                  <input type="radio" name="broadcast-mode" value="private" class="mt-0.5" onchange="updateAudienceHint()">
+                  <span>
+                    <span class="block text-sm font-medium">Private messages</span>
+                    <span class="block text-xs text-stone-400">Sends a DM to every registered user's private chat with the bot<span id="hint-private"></span></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-4 border-t border-stone-100 pt-4">
+              <p class="text-xs font-medium text-stone-500 mb-2">Test send</p>
+              <div class="flex items-center gap-2">
+                <input id="test-chat-id" type="text" inputmode="numeric" placeholder="Your Telegram ID"
+                  oninput="saveTestChatID()"
+                  class="border border-stone-200 rounded-lg px-3 py-1.5 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-stone-300">
+                <button onclick="sendTest()"
+                  class="px-3 py-1.5 border border-stone-300 text-stone-700 text-sm font-medium rounded-lg hover:bg-stone-50 transition-colors">
+                  Send test to me
+                </button>
+              </div>
+              <p class="text-xs text-stone-400 mt-1.5">Sends privately to just this chat ID, so you can see the real Telegram rendering before broadcasting. Find your ID in the Users tab, or message <a href="https://t.me/userinfobot" target="_blank" class="underline">@userinfobot</a>. Remembered on this browser.</p>
+            </div>
+
+            <div class="flex items-center gap-3 mt-4">
+              <button onclick="sendBroadcast()"
+                class="px-4 py-2 bg-stone-800 text-white text-sm font-medium rounded-lg hover:bg-stone-700 transition-colors">
+                Send
+              </button>
+              <span id="broadcast-status" class="text-sm text-stone-400"></span>
+            </div>
           </div>
+
+          <!-- Preview -->
+          <div>
+            <p class="text-xs font-medium text-stone-500 mb-2">Preview</p>
+            <div class="bg-[#e6ebee] border border-stone-200 rounded-xl px-4 py-4 min-h-[120px]">
+              <div class="bg-white rounded-xl rounded-tl-sm shadow-sm px-3.5 py-2.5 text-sm max-w-full inline-block break-words whitespace-pre-wrap" id="broadcast-preview" style="min-width: 2rem;">
+                <span class="text-stone-300">Message preview will appear here…</span>
+              </div>
+            </div>
+            <p class="text-xs text-stone-400 mt-2">Approximate — Telegram only supports a limited set of HTML tags. If a tag isn't supported, the send will fail and the error will be shown here.</p>
+          </div>
+
         </div>
       </div>
 
-      <!-- Monitors -->
-      <div class="mb-10">
-        <h2 class="text-lg font-semibold mb-3">Monitors <span id="monitors-count" class="text-stone-400 font-normal text-sm"></span></h2>
+      <!-- Monitors tab -->
+      <div id="tab-monitors" class="tab-panel hidden">
+        <h2 class="text-lg font-semibold mb-3">Monitors <span id="monitors-count-2" class="text-stone-400 font-normal text-sm"></span></h2>
         <div id="monitors-loading" class="text-stone-400 text-sm">Loading...</div>
         <div id="monitors-table" class="hidden overflow-x-auto">
           <table class="w-full text-sm bg-white border border-stone-200 rounded-xl overflow-hidden">
@@ -87,9 +151,9 @@
         </div>
       </div>
 
-      <!-- Deleted Monitors -->
-      <div class="mb-10">
-        <h2 class="text-lg font-semibold mb-3">Deleted Monitors <span id="deleted-count" class="text-stone-400 font-normal text-sm"></span></h2>
+      <!-- Deleted Monitors tab -->
+      <div id="tab-deleted" class="tab-panel hidden">
+        <h2 class="text-lg font-semibold mb-3">Deleted Monitors <span id="deleted-count-2" class="text-stone-400 font-normal text-sm"></span></h2>
         <div id="deleted-loading" class="text-stone-400 text-sm">Loading...</div>
         <div id="deleted-table" class="hidden overflow-x-auto">
           <table class="w-full text-sm bg-white border border-stone-200 rounded-xl overflow-hidden">
@@ -111,9 +175,9 @@
         </div>
       </div>
 
-      <!-- Users -->
-      <div>
-        <h2 class="text-lg font-semibold mb-3">Users <span id="users-count" class="text-stone-400 font-normal text-sm"></span></h2>
+      <!-- Users tab -->
+      <div id="tab-users" class="tab-panel hidden">
+        <h2 class="text-lg font-semibold mb-3">Users <span id="users-count-2" class="text-stone-400 font-normal text-sm"></span></h2>
         <div id="users-loading" class="text-stone-400 text-sm">Loading...</div>
         <div id="users-table" class="hidden overflow-x-auto">
           <table class="w-full text-sm bg-white border border-stone-200 rounded-xl overflow-hidden">
@@ -135,19 +199,50 @@
   </section>
 
   <script>
+    // ── Tabs ──────────────────────────────────────────────────────────
+    const TABS = ['system', 'communication', 'monitors', 'deleted', 'users'];
+
+    function activateTab(tab) {
+      if (!TABS.includes(tab)) tab = TABS[0];
+      for (const t of TABS) {
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+      }
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        const active = btn.dataset.tab === tab;
+        btn.classList.toggle('border-stone-800', active);
+        btn.classList.toggle('text-stone-900', active);
+        btn.classList.toggle('border-transparent', !active);
+        btn.classList.toggle('text-stone-500', !active);
+      });
+      history.replaceState(null, '', '#' + tab);
+    }
+
+    document.getElementById('tab-nav').addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab-btn');
+      if (btn) activateTab(btn.dataset.tab);
+    });
+
+    activateTab(location.hash.slice(1));
+
+    // ── Shared helpers ───────────────────────────────────────────────
     function formatDate(iso) {
       if (!iso) return '—';
       const d = new Date(iso);
       return d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
+    let monitorsData = [];
+    let usersData = [];
+
     async function loadMonitors() {
       try {
         const res = await fetch('/admin/api/monitors');
-        const monitors = await res.json();
-        document.getElementById('monitors-count').textContent = `(${monitors.length})`;
+        monitorsData = await res.json();
+        const countLabel = `(${monitorsData.length})`;
+        document.getElementById('monitors-count').textContent = countLabel;
+        document.getElementById('monitors-count-2').textContent = countLabel;
         const tbody = document.getElementById('monitors-body');
-        tbody.innerHTML = monitors.map(m => `
+        tbody.innerHTML = monitorsData.map(m => `
           <tr class="hover:bg-stone-50 ${!m.is_active ? 'opacity-40' : ''}">
             <td class="px-4 py-2.5 text-center text-stone-400">${m.id} <a href="/settings/${m.settings_token}?pwd=${m.settings_password}">↗</a></td>
             <td class="px-4 py-2.5 text-center text-stone-400">${m.user_id}</td>
@@ -169,6 +264,7 @@
         `).join('');
         document.getElementById('monitors-loading').classList.add('hidden');
         document.getElementById('monitors-table').classList.remove('hidden');
+        updateAudienceHint();
       } catch (e) {
         document.getElementById('monitors-loading').textContent = 'Failed to load monitors.';
       }
@@ -177,10 +273,12 @@
     async function loadUsers() {
       try {
         const res = await fetch('/admin/api/users');
-        const users = await res.json();
-        document.getElementById('users-count').textContent = `(${users.length})`;
+        usersData = await res.json();
+        const countLabel = `(${usersData.length})`;
+        document.getElementById('users-count').textContent = countLabel;
+        document.getElementById('users-count-2').textContent = countLabel;
         const tbody = document.getElementById('users-body');
-        tbody.innerHTML = users.map(u => `
+        tbody.innerHTML = usersData.map(u => `
           <tr class="hover:bg-stone-50">
             <td class="px-4 py-2.5 text-center text-stone-400">${u.id}</td>
             <td class="px-4 py-2.5 text-center text-stone-500">${u.telegram_id}</td>
@@ -191,6 +289,7 @@
         `).join('');
         document.getElementById('users-loading').classList.add('hidden');
         document.getElementById('users-table').classList.remove('hidden');
+        updateAudienceHint();
       } catch (e) {
         document.getElementById('users-loading').textContent = 'Failed to load users.';
       }
@@ -200,7 +299,9 @@
       try {
         const res = await fetch('/admin/api/monitors/deleted');
         const monitors = await res.json();
-        document.getElementById('deleted-count').textContent = `(${monitors.length})`;
+        const countLabel = `(${monitors.length})`;
+        document.getElementById('deleted-count').textContent = countLabel;
+        document.getElementById('deleted-count-2').textContent = countLabel;
         const tbody = document.getElementById('deleted-body');
         tbody.innerHTML = monitors.map(m => `
           <tr class="hover:bg-stone-50 opacity-60">
@@ -261,26 +362,95 @@
       }
     }
 
+    // ── Communication tab ────────────────────────────────────────────
+    function renderPreview() {
+      const text = document.getElementById('broadcast-text').value;
+      const preview = document.getElementById('broadcast-preview');
+      if (!text.trim()) {
+        preview.innerHTML = '<span class="text-stone-300">Message preview will appear here…</span>';
+        return;
+      }
+      // Telegram sends this with ParseMode HTML — render it the same way for an
+      // approximate preview. This is the admin's own input, shown only to the admin.
+      preview.innerHTML = text;
+    }
+
+    function updateAudienceHint() {
+      const mode = document.querySelector('input[name="broadcast-mode"]:checked').value;
+      const channelCount = new Set(
+        monitorsData.filter(m => m.is_active && m.channel_name).map(m => m.channel_name)
+      ).size;
+      document.getElementById('hint-channels').textContent = monitorsData.length ? ` (~${channelCount})` : '';
+      document.getElementById('hint-private').textContent = usersData.length ? ` (${usersData.length})` : '';
+    }
+
     async function sendBroadcast() {
       const text = document.getElementById('broadcast-text').value.trim();
+      const mode = document.querySelector('input[name="broadcast-mode"]:checked').value;
       const status = document.getElementById('broadcast-status');
       if (!text) { status.textContent = 'Enter a message first.'; return; }
+
+      const audience = mode === 'private' ? 'private chats' : 'channels';
+      if (!confirm(`Send this message to all ${audience}? This can't be recalled.`)) return;
+
       status.textContent = 'Sending...';
       try {
         const res = await fetch('/admin/api/broadcast', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, mode }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'error');
-        status.textContent = `Sent to ${data.channels} channel(s).`;
+        status.textContent = `Sent to ${data.count} ${audience}.`;
         document.getElementById('broadcast-text').value = '';
+        renderPreview();
       } catch (e) {
         status.textContent = 'Failed: ' + e.message;
       }
     }
 
+    // ── Test send ─────────────────────────────────────────────────────
+    function loadTestChatID() {
+      try {
+        const saved = localStorage.getItem('admin_test_chat_id');
+        if (saved) document.getElementById('test-chat-id').value = saved;
+      } catch (e) {}
+    }
+
+    function saveTestChatID() {
+      try {
+        localStorage.setItem('admin_test_chat_id', document.getElementById('test-chat-id').value.trim());
+      } catch (e) {}
+    }
+
+    async function sendTest() {
+      const text = document.getElementById('broadcast-text').value.trim();
+      const chatIdRaw = document.getElementById('test-chat-id').value.trim();
+      const status = document.getElementById('broadcast-status');
+      if (!text) { status.textContent = 'Enter a message first.'; return; }
+      const chatId = Number(chatIdRaw);
+      if (!chatIdRaw || !Number.isFinite(chatId) || !Number.isInteger(chatId)) {
+        status.textContent = 'Enter a numeric Telegram ID to test with.';
+        return;
+      }
+
+      status.textContent = 'Sending test...';
+      try {
+        const res = await fetch('/admin/api/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, mode: 'test', chat_id: chatId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'error');
+        status.textContent = 'Test sent — check your Telegram.';
+      } catch (e) {
+        status.textContent = 'Test failed: ' + e.message;
+      }
+    }
+
+    loadTestChatID();
     loadSettings();
     loadMonitors();
     loadDeletedMonitors();

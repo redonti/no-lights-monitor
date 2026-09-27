@@ -120,14 +120,14 @@ func (l *listener) handleBroadcast(payload []byte) {
 		log.Printf("[listener] bad broadcast message: %v", err)
 		return
 	}
-	if msg.ChannelID == 0 {
+	if msg.ChatID == 0 {
 		return
 	}
 	metrics.BotMessagesProcessed.WithLabelValues("broadcast").Inc()
-	chat := &tele.Chat{ID: msg.ChannelID}
+	chat := &tele.Chat{ID: msg.ChatID}
 	if _, err := l.bot.Send(chat, msg.Text, &tele.SendOptions{ParseMode: tele.ModeHTML}); err != nil {
 		metrics.BotNotificationErrors.WithLabelValues("broadcast").Inc()
-		log.Printf("[listener] broadcast to channel %d failed: %v", msg.ChannelID, err)
+		log.Printf("[listener] broadcast to chat %d failed: %v", msg.ChatID, err)
 	}
 }
 

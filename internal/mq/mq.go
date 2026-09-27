@@ -124,10 +124,12 @@ type InactivePauseMsg struct {
 	MonitorName     string `json:"monitor_name"`
 }
 
-// BroadcastMsg is published by the admin API to send a message to a Telegram channel.
+// BroadcastMsg is published by the admin API to send a message to a Telegram chat —
+// either a monitor's channel or a user's private chat with the bot, both addressed
+// by the same numeric Telegram chat ID.
 type BroadcastMsg struct {
-	ChannelID int64  `json:"channel_id"`
-	Text      string `json:"text"`
+	ChatID int64  `json:"chat_id"`
+	Text   string `json:"text"`
 }
 
 // ── Topology setup ───────────────────────────────────────────────────

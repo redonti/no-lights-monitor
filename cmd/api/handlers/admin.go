@@ -102,36 +102,72 @@ func (h *Handlers) AdminGetDeletedMonitors(c *fiber.Ctx) error {
 	return c.JSON(monitors)
 }
 
-// AdminBroadcast sends a text message to all active monitors' Telegram channels.
+// AdminBroadcast sends a text message either to all active monitors' Telegram
+// channels ("channels" mode, the default), as a private message to every
+// registered user's 1:1 chat with the bot ("private" mode), or, for previewing
+// the real thing in Telegram before a real send, to a single chat ID ("test" mode).
 func (h *Handlers) AdminBroadcast(c *fiber.Ctx) error {
 	var req struct {
-		Text string `json:"text"`
+		Text   string `json:"text"`
+		Mode   string `json:"mode"`    // "channels" (default), "private", or "test"
+		ChatID int64  `json:"chat_id"` // required for "test"
 	}
 	if err := c.BodyParser(&req); err != nil || strings.TrimSpace(req.Text) == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "text is required"})
 	}
+	if req.Mode != "private" && req.Mode != "test" {
+		req.Mode = "channels"
+	}
 
 	ctx := context.Background()
-	monitors, err := h.DB.GetMonitorsWithChannels(ctx)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load monitors"})
+
+	if req.Mode == "test" {
+		if req.ChatID == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "chat_id is required for a test send"})
+		}
+		if err := h.MQPublisher.Publish(ctx, mq.RoutingBroadcast, mq.BroadcastMsg{
+			ChatID: req.ChatID,
+			Text:   req.Text,
+		}); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to publish"})
+		}
+		return c.JSON(fiber.Map{"count": 1, "mode": req.Mode})
+	}
+
+	var chatIDs []int64
+	if req.Mode == "private" {
+		users, err := h.DB.GetAllUsers(ctx)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load users"})
+		}
+		for _, u := range users {
+			chatIDs = append(chatIDs, u.TelegramID)
+		}
+	} else {
+		monitors, err := h.DB.GetMonitorsWithChannels(ctx)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to load monitors"})
+		}
+		for _, m := range monitors {
+			chatIDs = append(chatIDs, m.ChannelID)
+		}
 	}
 
 	seen := make(map[int64]struct{})
 	var count int
-	for _, m := range monitors {
-		if _, ok := seen[m.ChannelID]; ok {
+	for _, id := range chatIDs {
+		if _, ok := seen[id]; ok {
 			continue
 		}
-		seen[m.ChannelID] = struct{}{}
+		seen[id] = struct{}{}
 		if err := h.MQPublisher.Publish(ctx, mq.RoutingBroadcast, mq.BroadcastMsg{
-			ChannelID: m.ChannelID,
-			Text:      req.Text,
+			ChatID: id,
+			Text:   req.Text,
 		}); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to publish"})
 		}
 		count++
 	}
 
-	return c.JSON(fiber.Map{"channels": count})
+	return c.JSON(fiber.Map{"count": count, "mode": req.Mode})
 }

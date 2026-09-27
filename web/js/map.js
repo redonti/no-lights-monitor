@@ -4,6 +4,9 @@ const map = L.map('map', {
   attributionControl: false,
 }).setView([48.5, 31.2], 6);
 
+// CARTO raster basemaps require an API key (public by design — it ships to the browser).
+const CARTO_KEY = 'cb1_40ni_1_349491b856381b4e1db06f8e';
+
 const baseLayers = {
   'Google': L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
     maxZoom: 20,
@@ -12,11 +15,11 @@ const baseLayers = {
   'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
   }),
-  'CARTO Voyager': L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  'CARTO Voyager': L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + CARTO_KEY, {
     maxZoom: 20,
     subdomains: 'abcd',
   }),
-  'Dark': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  'Dark': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=' + CARTO_KEY, {
     maxZoom: 20,
     subdomains: 'abcd',
   }),

@@ -1,4 +1,4 @@
-.PHONY: dev build run infra infra-down
+.PHONY: dev web build run infra infra-down
 
 # Start infrastructure (PostgreSQL + Redis)
 infra:
@@ -11,6 +11,10 @@ infra-down:
 # Run API service in development mode
 dev:
 	go run ./cmd/api
+
+# Serve ./web locally, proxying /api/* to production (UPSTREAM=... to override)
+web:
+	go run ./cmd/webdev -upstream $(or $(UPSTREAM),https://lights-monitor.com)
 
 # Build API binary
 build:

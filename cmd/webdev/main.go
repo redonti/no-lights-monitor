@@ -81,6 +81,9 @@ func main() {
 		case "/", "/index.html":
 			render(w, "index.html", http.StatusOK)
 			return
+		case "/features.html":
+			render(w, "features.html", http.StatusOK)
+			return
 		}
 		path := filepath.Join(*dir, filepath.FromSlash(strings.TrimPrefix(r.URL.Path, "/")))
 		if info, err := os.Stat(path); err != nil || info.IsDir() {

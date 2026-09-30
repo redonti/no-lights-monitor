@@ -40,6 +40,7 @@ func main() {
 		return buf.Bytes()
 	}
 	indexHTML := renderOnce("./web/index.html")
+	featuresHTML := renderOnce("./web/features.html")
 	notFoundHTML := renderOnce("./web/404.html")
 	serveHTML := func(body []byte, status int) fiber.Handler {
 		return func(c *fiber.Ctx) error {
@@ -169,6 +170,9 @@ func main() {
 	// Index page: pre-rendered with config values injected.
 	app.Get("/", serveHTML(indexHTML, fiber.StatusOK))
 	app.Get("/index.html", serveHTML(indexHTML, fiber.StatusOK))
+
+	// Features page: pre-rendered with config values injected.
+	app.Get("/features.html", serveHTML(featuresHTML, fiber.StatusOK))
 
 	// HTML and JS files: bypass static handler so Cache-Control is guaranteed.
 	noCache := func(c *fiber.Ctx) error {
